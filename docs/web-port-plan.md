@@ -590,7 +590,8 @@ Hosts that can't download GitHub source archives can use `platforms/web/fetch-de
   `audio-worklet.js`. Details are in `src/dusk/web/audio.hpp`.
 - **Build:**
   - `platforms/web/cmake/WebOptions.cmake` and the `web` presets.
-  - Link settings: JSPI, pthreads with a prespawned pool, WasmFS, page-owned memory,
+  - Link settings: JSPI, pthreads with a prespawned pool, WasmFS, the module's memory shared with
+    the page through `pre.js`,
     `GLOBAL_BASE` above aurora's 64 KiB texture sentinel.
   - Code mods off.
   - The CI job `build-web`.

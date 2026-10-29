@@ -232,13 +232,25 @@ cmake --build --preset web
 Configuring applies `platforms/web/patches` to `extern/aurora` and `extern/borealis`. The page,
 `dusklight.js`, `.wasm` and `.data` end up in `build/web`.
 
+If the build can't download its dependencies' GitHub source archives (some proxies refuse them),
+clone the same versions with git and point the build at them:
+
+```sh
+platforms/web/fetch-deps.sh deps
+cmake --preset web -DDUSK_WEB_DEPS_DIR="$PWD/deps"
+```
+
 The host-side tests of the web port need only a C++ compiler and, for the page test, Node and
 Playwright's Chromium:
 
 ```sh
-platforms/web/tests/run-native-tests.sh
+platforms/web/tests/run-native-tests.sh build/web/_deps/sdl-src
 node platforms/web/tests/shell-test.mjs
 ```
+
+After building, `platforms/web/tests/run-page.mjs build/web` checks that the prelaunch screen renders
+in headless Chromium; with `--disc <image> --expect-log <regex>` it boots a disc image, such as the
+data-free one `platforms/web/tests/make-synthetic-disc.py` writes.
 
 ## Running
 
