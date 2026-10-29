@@ -102,3 +102,39 @@ index 363423b..a04981e 100644
      if (has_scheme(location)) {
          return Status::Unsupported;
      }
+diff --git a/tests/io_test.cpp b/tests/io_test.cpp
+index 99d4739..e26ad3f 100644
+--- a/tests/io_test.cpp
++++ b/tests/io_test.cpp
+@@ -1,5 +1,6 @@
+ #include "borealis/io.hpp"
+ 
++#include <SDL3/SDL_iostream.h>
+ #include <gtest/gtest.h>
+ 
+ #include <array>
+@@ -32,6 +33,24 @@ protected:
+     std::filesystem::path directory;
+ };
+ 
++TEST(IOSchemeTest, RegisteredSchemeOpensReadOnlyStreams) {
++    borealis::io::register_scheme("borealistest", [](std::string_view location) -> SDL_IOStream* {
++        static constexpr char kData[] = "hello";
++        return location == "borealistest://hello" ? SDL_IOFromConstMem(kData, 5) : nullptr;
++    });
++
++    EXPECT_EQ(borealis::io::check("borealistest://hello"), borealis::io::Status::Ok);
++    auto opened = borealis::io::open("borealistest://hello");
++    ASSERT_EQ(opened.status, borealis::io::Status::Ok) << opened.message;
++    EXPECT_FALSE(opened.file.writable());
++    EXPECT_EQ(opened.file.size(), 5u);
++
++    EXPECT_EQ(borealis::io::open("borealistest://missing").status, borealis::io::Status::NotFound);
++    EXPECT_EQ(borealis::io::open("borealistest://hello", borealis::io::File::Mode::Truncate).status,
++        borealis::io::Status::Unsupported);
++    EXPECT_EQ(borealis::io::check("unregistered://x"), borealis::io::Status::Unsupported);
++}
++
+ TEST_F(IOTest, StreamsAndSeeks) {
+     const auto location = borealis::io::fs_path_to_string(directory / "sample.txt");
+     auto opened = borealis::io::open(location);
