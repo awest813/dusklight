@@ -62,6 +62,7 @@ function(dusk_configure_web_target target)
     math(EXPR _initial_bytes "${DUSK_WEB_INITIAL_MEMORY_PAGES} * 65536")
     math(EXPR _maximum_bytes "${DUSK_WEB_MAXIMUM_MEMORY_PAGES} * 65536")
     target_sources(${target} PRIVATE
+            "${CMAKE_SOURCE_DIR}/src/dusk/web/audio.cpp"
             "${CMAKE_SOURCE_DIR}/src/dusk/web/disc.cpp"
             "${CMAKE_SOURCE_DIR}/src/dusk/web/platform.cpp"
     )
@@ -103,6 +104,7 @@ function(dusk_configure_web_target target)
                 "${DUSK_WEB_DIR}/shell/shell.js"
                 "${DUSK_WEB_DIR}/shell/shell.css"
                 "${DUSK_WEB_DIR}/shell/disc-worker.js"
+                "${DUSK_WEB_DIR}/shell/audio-worklet.js"
                 "${DUSK_WEB_DIR}/shell/_headers"
                 "${DUSK_WEB_DIR}/shell/serve.mjs"
                 "$<TARGET_FILE_DIR:${target}>"

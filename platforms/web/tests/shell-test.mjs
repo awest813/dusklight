@@ -183,6 +183,44 @@ try {
   }
   check(restored === 'card-bytes', 'restore brings the saves back');
 
+  // The audio worklet plays the ring, counts underruns, and hands the space back.
+  const audio = await page.evaluate(async () => {
+    const memory = new WebAssembly.Memory({ initial: 4, maximum: 8, shared: true });
+    const header = 1024;
+    const data = 4096;
+    const frames = 512; // ring capacity
+    const channels = 2;
+    const ring = new Uint32Array(memory.buffer, header, 4);
+    const samples = new Float32Array(memory.buffer, data, frames * channels);
+    // Start near 2^32 so the counters wrap; queue 300 frames of a ramp (L = i, R = -i) / 1000.
+    ring[0] = 0xffffff00;
+    ring[1] = 0xffffff00 + 300;
+    for (let i = 0; i < 300; ++i) {
+      const base = ((0xffffff00 + i) % frames) * channels;
+      samples[base] = i / 1000;
+      samples[base + 1] = -i / 1000;
+    }
+    const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 512, sampleRate: 48000 });
+    await ctx.audioWorklet.addModule('audio-worklet.js');
+    const node = new AudioWorkletNode(ctx, 'dusk-audio', {
+      numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+      processorOptions: { memory, header, data, frames, channels },
+    });
+    node.connect(ctx.destination);
+    const rendered = await ctx.startRendering();
+    const left = rendered.getChannelData(0);
+    const right = rendered.getChannelData(1);
+    let ok = true;
+    for (let i = 0; i < 512; ++i) {
+      const want = i < 300 ? i / 1000 : 0;
+      ok &&= Math.abs(left[i] - want) < 1e-6 && Math.abs(right[i] + want) < 1e-6;
+    }
+    return { ok, read: ring[0], underruns: ring[3] };
+  });
+  check(audio.ok, 'audio worklet plays the queued samples, then silence');
+  check(audio.read === ((0xffffff00 + 300) >>> 0), 'audio worklet consumes exactly what was queued, across the wrap');
+  check(audio.underruns === 212, 'audio worklet counts the frames it had to fill');
+
   await page.click('#forget-stored');
   await page.goto(isolated.base);
   await page.waitForSelector('#disc:not([hidden])');

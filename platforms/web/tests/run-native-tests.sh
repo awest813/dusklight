@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Builds and runs the web port's host-side unit tests natively: the ISO reader (nod_iso) and the
-# web disc channel. They need only a C++20 compiler; the disc channel test also needs SDL3:
+# Builds and runs the web port's host-side unit tests natively: the ISO reader (nod_iso), the web
+# audio ring and mixer, and the web disc channel. They need only a C++20 compiler; the disc
+# channel test also needs SDL3:
 #
 #   platforms/web/tests/run-native-tests.sh [SDL3 include dir] [libSDL3.a]
 #
-# Without SDL3 arguments, only the nod_iso test runs.
+# Without SDL3 arguments, the disc channel test is skipped.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 out="$(mktemp -d)"
@@ -15,6 +16,10 @@ if [[ "${SANITIZE:-1}" == 1 ]]; then flags+=(-fsanitize=address,undefined); fi
 
 "$cxx" "${flags[@]}" -I"$root/platforms/web/nod_iso/include" \
     "$root/platforms/web/nod_iso/nod_iso.cpp" "$root/platforms/web/nod_iso/nod_iso_test.cpp" -o "$out/nod_iso_test"
+
+"$cxx" "${flags[@]}" -I"$root/src" "$root/src/dusk/web/audio.cpp" "$root/platforms/web/tests/web_audio_test.cpp" \
+    -o "$out/web_audio_test"
+"$out/web_audio_test"
 "$out/nod_iso_test"
 
 if [[ $# -ge 2 ]]; then

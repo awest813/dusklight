@@ -15,7 +15,13 @@
 
 #include <array>
 #include <cassert>
+#include <memory>
 #include <span>
+
+#ifdef __EMSCRIPTEN__
+#include "dusk/logging.h"
+#include "dusk/web/audio.hpp"
+#endif
 
 using namespace dusk::audio;
 
@@ -23,6 +29,16 @@ static OutputSubframe OutBuffer;
 static std::array<f32, DSP_SUBFRAME_SIZE * OutputSubframe::NUM_CHANNELS> OutInterleaveBufferFull;
 
 static SDL_AudioStream* PlaybackStream;
+
+#ifdef __EMSCRIPTEN__
+// On the web, PlaybackStream is a plain FIFO (no device): a mixer thread renders into it and
+// hands the samples to the browser (see dusk/web/audio.hpp).
+static std::unique_ptr<dusk::web::audio::Ring> WebRing;
+static std::unique_ptr<dusk::web::audio::Mixer> WebMixer;
+
+static void RenderForWeb(float* out, uint32_t frames, void*);
+static void StartWebOutput();
+#endif
 
 /**
  * SDL audiostream callback to trigger rendering of new audio data.
@@ -60,7 +76,12 @@ static size_t GetChannelCountForOutputMode(dusk::AudioOutputMode config) {
 
 static bool InitSDL3Output() {
     const auto speakerConfig = dusk::getSettings().audio.outputMode.getValue();
+#ifdef __EMSCRIPTEN__
+    // The browser output is stereo.
+    const size_t desiredChannelCount = 2;
+#else
     const auto desiredChannelCount = GetChannelCountForOutputMode(speakerConfig);
+#endif
     const bool hrtf = speakerConfig == dusk::AudioOutputMode::StereoHeadphones;
 
     if (PlaybackStream && desiredChannelCount == OutChannelCount) {
@@ -81,8 +102,12 @@ static bool InitSDL3Output() {
         static_cast<int>(desiredChannelCount),
         SampleRate,
     };
+#ifdef __EMSCRIPTEN__
+    SDL_AudioStream* newStream = SDL_CreateAudioStream(&spec, &spec);
+#else
     SDL_AudioStream* newStream =
         SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, &GetNewAudio, nullptr);
+#endif
 
     {
         JASCriticalSection section;
@@ -107,7 +132,11 @@ void dusk::audio::Initialize() {
 
     JASPoolAllocObject_MultiThreaded<JASChannel>::newMemPool(0x48);
 
+#ifdef __EMSCRIPTEN__
+    StartWebOutput();
+#else
     SDL_ResumeAudioStreamDevice(PlaybackStream);
+#endif
 }
 
 void dusk::audio::Reinitialize() {
@@ -118,6 +147,11 @@ void dusk::audio::Reinitialize() {
 }
 
 void dusk::audio::Shutdown() {
+#ifdef __EMSCRIPTEN__
+    WebMixer.reset();
+    dusk::web::audio::stop_output();
+    WebRing.reset();
+#endif
     if (PlaybackStream) {
         SDL_DestroyAudioStream(PlaybackStream);
         PlaybackStream = nullptr;
@@ -133,6 +167,13 @@ void dusk::audio::SetMasterVolume(const f32 value) {
 }
 
 void dusk::audio::SetPaused(const bool paused) {
+#ifdef __EMSCRIPTEN__
+    if (WebMixer) {
+        WebMixer->set_paused(paused);
+        dusk::web::audio::set_output_paused(paused);
+    }
+    return;
+#endif
     if (paused) {
         SDL_PauseAudioStreamDevice(PlaybackStream);
     } else {
@@ -162,6 +203,27 @@ void SDLCALL GetNewAudio(
     }
     FrameMarkEnd(FrameName);
 }
+
+#ifdef __EMSCRIPTEN__
+void RenderForWeb(float* out, uint32_t frames, void*) {
+    const int bytes = static_cast<int>(frames * OutChannelCount * sizeof(f32));
+    while (SDL_GetAudioStreamAvailable(PlaybackStream) < bytes) {
+        RenderNewAudioFrame();
+    }
+    SDL_GetAudioStreamData(PlaybackStream, out, bytes);
+}
+
+void StartWebOutput() {
+    using namespace dusk::web::audio;
+    // About 43 ms buffered, rendered in 5 ms steps.
+    WebRing = std::make_unique<Ring>(4096, static_cast<uint32_t>(OutChannelCount));
+    WebMixer = std::make_unique<Mixer>(*WebRing, SampleRate, 2048, 256, &RenderForWeb, nullptr);
+    if (!start_output(*WebRing, SampleRate)) {
+        // The mixer keeps the game's audio moving silently.
+        DuskLog.warn("Web audio output is unavailable; continuing without sound");
+    }
+}
+#endif
 
 int RenderNewAudioFrame() {
     ZoneScoped;
