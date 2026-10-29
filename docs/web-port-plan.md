@@ -1,7 +1,7 @@
 # Web port: audit and plan
 
-Status: draft for discussion. Nothing here is implemented yet. Open questions are collected under
-[Decisions needed](#decisions-needed).
+Status: plan accepted; nothing is implemented yet. Decisions are recorded under
+[Decisions](#decisions), and the questions still open are listed after them.
 
 This document audits what stands between the current native build and one that runs in a browser
 (WebAssembly + WebGPU), and lays out a phased plan. File references are to this repo, to
@@ -127,7 +127,7 @@ On wasm32 these fall back to the original 32-bit GameCube layouts. Most PC fixes
 `TARGET_PC`, not pointer width (e.g. `JKRArchive.h:93-102`). The 799 `STATIC_ASSERT(sizeof…)` checks
 are compiled out off CodeWarrior (`include/global.h:62-72`).
 
-**Recommendation: wasm32.** It has the widest browser support, matches the original layouts, and
+**Decision: wasm32.** It has the widest browser support, matches the original layouts, and
 nod's Rust target exists only for wasm32. wasm64 would reuse the desktop-tested 64-bit layouts, but
 it has no Safari support and is slower.
 
@@ -324,7 +324,7 @@ This is the most likely source of "feels worse than native".
 **Plan:**
 - **Phase 0 spike:** build nod for `wasm32-unknown-emscripten` with atomics (`-Zbuild-std`),
   `preloader_threads = 0`, and link it into a threaded Emscripten test.
-- **Fallback if the spike fails:** a small C++ reader for plain ISO/GCM behind the same nod C API
+- **Fallback if the spike fails (accepted):** a small C++ reader for plain ISO/GCM behind the same nod C API
   subset (`nod_disc_open_stream`, `_partition_*`, `_iterate_fst`, `nod_read/seek`), with a
   "convert to ISO first" message for compressed formats. Note that aurora's DVD overlay hooks
   (`include/aurora/dvd.h`) already show the FST can be served without nod.
@@ -465,8 +465,8 @@ add a service worker for offline play. This is the zero-install path MKWiii cann
 `serve` script that sets the headers. The legal posture is the same as the native downloads, but
 there is little benefit over native.
 
-The recommendation is A, but the decision belongs to the maintainers. They know the project's
-legal posture better than an audit can.
+**Decision: A.** The first release is a hosted site. The upstream maintainers still need to agree
+before anything is hosted under the project's name.
 
 ## Phased plan
 
@@ -476,14 +476,14 @@ with COOP/COEP, plus an offscreen canvas shim. Phases that need a disc are verif
 
 | Phase | Work | Exit criterion |
 | --- | --- | --- |
-| 0. Spikes | (a) nod on `wasm32-unknown-emscripten` with atomics, linked into a threaded test. (b) MKWiii's aurora smoke app against our aurora with the ported patch. (c) JSPI main thread spinning on a pthread that reads a `File` via `FileReaderSync` and an OPFS sync handle. (d) WebGPU feature check (swizzle, immediates, BC, compat limits) in Chrome, Firefox and Safari. | Written go/no-go for each; decide the nod fallback and the distribution model. |
+| 0. Spikes | (a) nod on `wasm32-unknown-emscripten` with atomics, linked into a threaded test. (b) MKWiii's aurora smoke app against our aurora with the ported patch. (c) JSPI main thread spinning on a pthread that reads a `File` via `FileReaderSync` and an OPFS sync handle. (d) WebGPU feature check (swizzle, immediates, BC, compat limits) in Chrome, Firefox and Safari. | Written go/no-go for each. If (a) fails, switch Phase 4 to the ISO/GCM reader. |
 | 1. Portability fixes (native-safe) | Endian detection; `api.h` wasm32 asserts; `has_data` sentinel; `texture_replacement` casts; `-rdynamic` guard; the `OSWakeupThread`/atomics fixes from section 3. | Native CI green; a wasm32 compile of `src/` and `libs/JSystem` gets past these errors. |
 | 2. Toolchain | `x-web` preset, aurora web options and patch, borealis web stubs (crash, net, update, discord off, file_select web, http fetch), code mods off, Freetype for RmlUi, link flags, page template. | `dusklight.wasm` links. CI `web_build` job. |
 | 3. Main loop and graphics | JSPI `main`, present on rAF, render worker inline, FIFO `Drain`, `wait_for_gpu_progress` yields, Limiter sleeps suspend, no `SDL_WaitEvent` pause, `res/` preloaded, WasmFS + OPFS for the user dir. | The prelaunch UI (RmlUi) renders and accepts input in headless Chromium with no disc. CI `web_prelaunch` job. |
 | 4. Disc and boot | nod (or fallback) in the aurora DVD worker over OPFS or a `File`; web file picker; validation with progress; game `OSThread`s on the pthread pool; long main-thread waits made suspendable. | A local build reaches the title screen from a user disc in Chromium. |
 | 5. Audio, movies, saves | Mixer pthread plus AudioWorklet ring buffer; gesture unlock; THP movies (read/decode threads, `daMP_WaitUntilPrepare`); CARD saves persisting in OPFS; save export/import; fatal overlay and log download. | Intro movie plays with sound; a save survives a reload. |
 | 6. Performance | Profile main-thread budget (sim + GX FIFO + render now share it); async pipeline creation; 60+ fps interpolation; memory sizing; startup time and `.wasm` size. | Steady 30 fps sim with interpolated 60 fps presentation in a heavy area (Hyrule Field, Castle Town) on mid-range desktop hardware in Chromium. |
-| 7. Packaging | Hosted or local per the decision; COOP/COEP; compression and caching; unsupported-browser page; docs. | One command builds a deployable folder, and CI publishes it as an artifact. |
+| 7. Packaging | Static hosted site; COOP/COEP from the host (or `coi-serviceworker`); compressed, versioned `.wasm`; service worker for offline play; unsupported-browser page for non-Chromium browsers; docs. | CI builds the site folder and deploys it to a preview URL, where a disc picked in Chromium boots. |
 | 8. Optional | Firefox and Safari (immediate-data fallback, JSPI status); Luau mods as a built-in static mod; mod catalog over fetch with CORS; LiveSplit over WebSocket; mobile browsers and touch. | Per item. |
 
 ## Top risks
@@ -501,12 +501,18 @@ with COOP/COEP, plus an offscreen canvas shim. Phases that need a disc are verif
    never wait on the main thread.
 6. **Browser coverage.** JSPI and immediate data narrow the first release to Chromium.
 
-## Decisions needed
+## Decisions
 
-- **Distribution:** hosted (A) or local-only (B).
-- **Browsers:** Chromium-only first release (recommended), or block on Firefox and Safari.
-- **wasm32** (recommended) or wasm64.
-- **Disc formats** if nod cannot be built: is ISO/GCM-only acceptable for a first release?
+- **Distribution:** a hosted static site, where the user opens a URL and picks their disc (option A
+  under [Distribution](#distribution)). This needs upstream maintainers' agreement before hosting
+  under the project's name.
+- **Browsers:** Chromium-only for the first release. Firefox and Safari are Phase 8.
+- **Pointer size:** wasm32.
+- **Disc formats:** if nod cannot be built for wasm, the first release accepts plain ISO/GCM only,
+  and tells users to convert compressed images first.
+
+## Still open
+
 - **Disc storage:** copy the disc into OPFS (persistent, costs quota) or re-pick it each session.
 - **aurora changes:** upstream to `encounter/aurora` behind `__EMSCRIPTEN__` (recommended, as
   MKWiii decided for its fork), or carry a patch.
