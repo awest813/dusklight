@@ -18,6 +18,22 @@ if (NOT _dusk_web_patch_result EQUAL 0)
     message(FATAL_ERROR "dusklight: failed to apply the web patches to extern/aurora and extern/borealis")
 endif ()
 
+# Pre-fetched dependency checkouts (platforms/web/fetch-deps.sh), for hosts that cannot download
+# the pinned GitHub source archives. Each one replaces that dependency's download.
+set(DUSK_WEB_DEPS_DIR "" CACHE PATH "Pre-fetched web build dependencies (see platforms/web/fetch-deps.sh)")
+if (DUSK_WEB_DEPS_DIR)
+    foreach (_dep IN ITEMS ABSEIL-CPP:abseil-cpp XXHASH:xxhash FMT:fmt ZLIB:zlib-ng PNG:libpng
+            FREETYPE:freetype IMGUI:imgui RMLUI:rmlui TRACY:tracy SDL:sdl3 PICOSHA2:picosha2
+            CXXOPTS:cxxopts)
+        string(REPLACE ":" ";" _dep "${_dep}")
+        list(GET _dep 0 _name)
+        list(GET _dep 1 _subdir)
+        if (EXISTS "${DUSK_WEB_DEPS_DIR}/${_subdir}")
+            set(FETCHCONTENT_SOURCE_DIR_${_name} "${DUSK_WEB_DEPS_DIR}/${_subdir}" CACHE PATH "" FORCE)
+        endif ()
+    endforeach ()
+endif ()
+
 # Code mods patch native code at runtime, which wasm cannot do.
 set(DUSK_ENABLE_CODE_MODS OFF CACHE BOOL "" FORCE)
 set(DUSK_ENABLE_OPUS OFF CACHE BOOL "" FORCE)
