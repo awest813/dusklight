@@ -115,6 +115,27 @@ void test_pause_stops_rendering() {
     CHECK(counter.calls > before);
 }
 
+void test_hidden_page_stops_rendering() {
+    audio::Ring ring(4096, 2);
+    Counter counter;
+    ring.header().playing = 1;
+    audio::Mixer mixer(ring, 48000, 2048, 256, &Counter::render, &counter);
+    std::this_thread::sleep_for(30ms);
+    ring.header().hidden = 1;
+    std::this_thread::sleep_for(30ms);
+    const uint32_t before = counter.calls;
+    // Nothing plays while hidden either, so make room as a player would and check nothing refills it.
+    std::vector<float> drain(4096 * 2);
+    ring.pop(drain.data(), 4096);
+    std::this_thread::sleep_for(100ms);
+    CHECK(counter.calls == before);
+    CHECK(ring.buffered() == 0);
+    ring.header().hidden = 0;
+    std::this_thread::sleep_for(100ms);
+    CHECK(counter.calls > before);
+    CHECK(ring.buffered() > 0);
+}
+
 }  // namespace
 
 int main() {
@@ -122,6 +143,7 @@ int main() {
     test_plays_continuously();
     test_discards_in_real_time_while_not_playing();
     test_pause_stops_rendering();
+    test_hidden_page_stops_rendering();
     if (gFailures != 0) {
         std::fprintf(stderr, "%d check(s) failed\n", gFailures);
         return 1;

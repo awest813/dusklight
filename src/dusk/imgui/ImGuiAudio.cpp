@@ -313,6 +313,21 @@ static void ShowSeqDataBlocks() {
     }
 }
 
+#ifdef __EMSCRIPTEN__
+static void ShowWebOutput() {
+    const auto stats = dusk::audio::GetWebOutputStats();
+    if (stats.sampleRate == 0) {
+        ImGui::TextUnformatted("No browser audio output");
+        return;
+    }
+    ImGui::Text("Sample rate: %u Hz", stats.sampleRate);
+    ImGui::Text("State: %s", stats.hidden ? "page hidden" : stats.playing ? "playing" : "waiting for the browser");
+    ImGui::Text("Buffered: %.1f ms", 1000.0 * stats.bufferedFrames / stats.sampleRate);
+    ImGui::Text("Underruns: %u frames (%.1f ms)", stats.underrunFrames,
+        1000.0 * stats.underrunFrames / stats.sampleRate);
+}
+#endif
+
 void dusk::ImGuiMenuTools::ShowAudioDebug() {
     if (!getSettings().backend.enableAdvancedSettings ||
         !ImGuiConsole::CheckMenuViewToggle(ImGuiKey_F10, m_showAudioDebug))
@@ -358,6 +373,13 @@ void dusk::ImGuiMenuTools::ShowAudioDebug() {
                 ShowSeqDataBlocks();
                 ImGui::EndTabItem();
             }
+
+#ifdef __EMSCRIPTEN__
+            if (ImGui::BeginTabItem("Web output")) {
+                ShowWebOutput();
+                ImGui::EndTabItem();
+            }
+#endif
 
             ImGui::EndTabBar();
         }

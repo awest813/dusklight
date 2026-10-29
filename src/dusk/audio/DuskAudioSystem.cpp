@@ -13,8 +13,10 @@
 #include <SDL3/SDL_init.h>
 #include <tracy/Tracy.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstring>
 #include <memory>
 #include <span>
 
@@ -35,6 +37,8 @@ static SDL_AudioStream* PlaybackStream;
 // hands the samples to the browser (see dusk/web/audio.hpp).
 static std::unique_ptr<dusk::web::audio::Ring> WebRing;
 static std::unique_ptr<dusk::web::audio::Mixer> WebMixer;
+// The rate the browser plays at (0 without audio output).
+static u32 WebOutputRate;
 
 static void RenderForWeb(float* out, uint32_t frames, void*);
 static void StartWebOutput();
@@ -210,20 +214,51 @@ void SDLCALL GetNewAudio(
 void RenderForWeb(float* out, uint32_t frames, void*) {
     const int bytes = static_cast<int>(frames * OutChannelCount * sizeof(f32));
     while (SDL_GetAudioStreamAvailable(PlaybackStream) < bytes) {
-        RenderNewAudioFrame();
+        if (RenderNewAudioFrame() <= 0) {
+            break;
+        }
     }
-    SDL_GetAudioStreamData(PlaybackStream, out, bytes);
+    const int got = SDL_GetAudioStreamData(PlaybackStream, out, bytes);
+    if (got < bytes) {
+        std::memset(reinterpret_cast<u8*>(out) + std::max(got, 0), 0, bytes - std::max(got, 0));
+    }
 }
 
 void StartWebOutput() {
     using namespace dusk::web::audio;
-    // About 43 ms buffered, rendered in 5 ms steps.
     WebRing = std::make_unique<Ring>(4096, static_cast<uint32_t>(OutChannelCount));
-    WebMixer = std::make_unique<Mixer>(*WebRing, SampleRate, 2048, 256, &RenderForWeb, nullptr);
-    if (!start_output(*WebRing, SampleRate)) {
-        // The mixer keeps the game's audio moving silently.
+    WebOutputRate = start_output(*WebRing, SampleRate);
+    u32 mixRate = WebOutputRate;
+    if (WebOutputRate == 0) {
+        // The mixer keeps the game's audio moving silently, at the game's own rate.
         DuskLog.warn("Web audio output is unavailable; continuing without sound");
+        mixRate = SampleRate;
+    } else if (WebOutputRate != static_cast<u32>(SampleRate)) {
+        // The browser only plays at the device's rate; the stream resamples the game's output.
+        const SDL_AudioSpec deviceSpec = {
+            SDL_AUDIO_F32,
+            static_cast<int>(OutChannelCount),
+            static_cast<int>(WebOutputRate),
+        };
+        SDL_SetAudioStreamFormat(PlaybackStream, nullptr, &deviceSpec);
+        DuskLog.info("Web audio plays at {} Hz; resampling from {} Hz", WebOutputRate, SampleRate);
     }
+    // About 43 ms buffered (2048 frames at 48 kHz), rendered in steps of about 5 ms.
+    WebMixer = std::make_unique<Mixer>(*WebRing, mixRate, mixRate * 43 / 1000, 256, &RenderForWeb, nullptr);
+}
+
+dusk::audio::WebOutputStats dusk::audio::GetWebOutputStats() {
+    WebOutputStats stats{};
+    if (!WebRing) {
+        return stats;
+    }
+    const auto& header = WebRing->header();
+    stats.sampleRate = WebOutputRate;
+    stats.playing = header.playing.load(std::memory_order_relaxed) != 0;
+    stats.hidden = header.hidden.load(std::memory_order_relaxed) != 0;
+    stats.bufferedFrames = WebRing->buffered();
+    stats.underrunFrames = header.underruns.load(std::memory_order_relaxed);
+    return stats;
 }
 #endif
 

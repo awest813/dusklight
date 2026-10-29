@@ -63,7 +63,7 @@ void Mixer::run() {
     auto next = clock::now();
 
     while (!mStop.load(std::memory_order_relaxed)) {
-        if (mPaused.load(std::memory_order_acquire)) {
+        if (mPaused.load(std::memory_order_acquire) || mRing.header().hidden.load(std::memory_order_acquire) != 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             next = clock::now();
             continue;
@@ -103,12 +103,18 @@ void Mixer::run() {
 #ifdef __EMSCRIPTEN__
 
 // Creates the AudioContext and the worklet (platforms/web/shell/audio-worklet.js) that plays the
-// ring.
-EM_ASYNC_JS(int, dusk_web_audio_start, (void* header, float* data, uint32_t frames, uint32_t channels,
-                                         uint32_t sampleRate), {
+// ring. Returns the context's sample rate, or 0.
+EM_ASYNC_JS(uint32_t, dusk_web_audio_start, (void* header, float* data, uint32_t frames, uint32_t channels,
+                                              uint32_t preferredRate), {
   try {
     const memory = typeof wasmMemory !== 'undefined' ? wasmMemory : Module['wasmMemory'];
-    const ctx = new AudioContext({ sampleRate, latencyHint: 'interactive' });
+    let ctx;
+    try {
+      ctx = new AudioContext({ sampleRate: preferredRate, latencyHint: 'interactive' });
+    } catch (e) {
+      // Some browsers only run at the device's rate; the game's stream resamples to it.
+      ctx = new AudioContext({ latencyHint: 'interactive' });
+    }
     // Served next to the page (platforms/web/shell).
     await ctx.audioWorklet.addModule('audio-worklet.js');
     const node = new AudioWorkletNode(ctx, 'dusk-audio', {
@@ -118,21 +124,31 @@ EM_ASYNC_JS(int, dusk_web_audio_start, (void* header, float* data, uint32_t fram
       processorOptions: { memory, header, data, frames, channels },
     });
     node.connect(ctx.destination);
-    const playing = () => Atomics.store(new Int32Array(memory.buffer, header, 3), 2, ctx.state === 'running' ? 1 : 0);
+    const flags = () => new Int32Array(memory.buffer, header, 5);
+    const playing = () => Atomics.store(flags(), 2, ctx.state === 'running' ? 1 : 0);
     ctx.onstatechange = playing;
     playing();
     // Browsers start audio only after a user gesture; resume on the next one if it is still waiting.
     // A refused resume() just leaves audio waiting, so its rejection is ignored.
+    const wanted = () => !Module['duskAudioPaused'] && !document.hidden;
     const resume = () => {
-      if (ctx.state === 'suspended' && !Module['duskAudioPaused']) ctx.resume().catch(() => {});
+      if (ctx.state === 'suspended' && wanted()) ctx.resume().catch(() => {});
     };
     const gestures = ['pointerdown', 'keydown', 'touchend'];
     for (const type of gestures) {
       document.addEventListener(type, resume, { capture: true });
     }
-    Module['duskAudio'] = { ctx, node, resume, gestures };
+    // A hidden page gets no animation frames, so the game stops; stop its audio with it.
+    const visibility = () => {
+      Atomics.store(flags(), 4, document.hidden ? 1 : 0);
+      if (document.hidden) ctx.suspend().catch(() => {});
+      else resume();
+    };
+    document.addEventListener('visibilitychange', visibility);
+    visibility();
+    Module['duskAudio'] = { ctx, node, resume, gestures, visibility };
     resume();
-    return 1;
+    return ctx.sampleRate;
   } catch (e) {
     console.error('web audio: ' + e);
     return 0;
@@ -143,7 +159,8 @@ EM_JS(void, dusk_web_audio_set_paused, (int paused), {
   Module['duskAudioPaused'] = !!paused;
   const audio = Module['duskAudio'];
   if (audio) {
-    (paused ? audio.ctx.suspend() : audio.ctx.resume()).catch(() => {});
+    if (paused) audio.ctx.suspend().catch(() => {});
+    else audio.resume();
   }
 });
 
@@ -155,13 +172,14 @@ EM_ASYNC_JS(void, dusk_web_audio_stop, (), {
   for (const type of audio.gestures) {
     document.removeEventListener(type, audio.resume, { capture: true });
   }
+  document.removeEventListener('visibilitychange', audio.visibility);
   audio.ctx.onstatechange = null;
   audio.node.disconnect();
   await audio.ctx.close().catch(() => {});
 });
 
-bool start_output(Ring& ring, uint32_t sampleRate) {
-    return dusk_web_audio_start(&ring.header(), ring.data(), ring.capacity(), ring.channels(), sampleRate) != 0;
+uint32_t start_output(Ring& ring, uint32_t preferredRate) {
+    return dusk_web_audio_start(&ring.header(), ring.data(), ring.capacity(), ring.channels(), preferredRate);
 }
 
 void set_output_paused(bool paused) { dusk_web_audio_set_paused(paused ? 1 : 0); }

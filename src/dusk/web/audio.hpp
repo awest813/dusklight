@@ -15,12 +15,14 @@
 
 namespace dusk::web::audio {
 
-// Shared with the AudioWorklet processor in audio.cpp, which addresses the fields by index.
+// Shared with the page: platforms/web/shell/audio-worklet.js and the JS in audio.cpp address the
+// fields as 32-bit words by index.
 struct RingHeader {
     std::atomic<uint32_t> read{0};       // 0: frames consumed, ever (wraps)
     std::atomic<uint32_t> write{0};      // 1: frames produced, ever (wraps)
     std::atomic<int32_t> playing{0};     // 2: whether the browser is pulling audio
-    uint32_t underruns = 0;              // 3: frames the worklet had to fill with silence
+    std::atomic<uint32_t> underruns{0};  // 3: frames the worklet had to fill with silence
+    std::atomic<int32_t> hidden{0};      // 4: whether the page is hidden (the game can't run then)
 };
 
 // Fills `frames` interleaved frames of `channels` samples. Called on the mixer thread.
@@ -49,8 +51,9 @@ private:
 };
 
 // Renders into a ring on its own thread, keeping about `targetFrames` buffered. While nothing
-// plays the ring (autoplay not yet allowed, or paused), it keeps rendering at real-time pace and
-// discards the output, so the game never waits on audio that isn't running.
+// plays the ring (autoplay not yet allowed), it keeps rendering at real-time pace and discards the
+// output, so the game never waits on audio that isn't running. While paused, or while the page is
+// hidden (the browser stops the game's frames then), it renders nothing.
 class Mixer {
 public:
     Mixer(Ring& ring, uint32_t sampleRate, uint32_t targetFrames, uint32_t chunkFrames, RenderCallback render,
@@ -78,8 +81,9 @@ private:
 };
 
 #ifdef __EMSCRIPTEN__
-// Starts browser playback of `ring` at `sampleRate` (stereo). Main thread only.
-bool start_output(Ring& ring, uint32_t sampleRate);
+// Starts browser playback of `ring` (stereo), at `preferredRate` if the browser allows it. Returns
+// the rate the browser plays at, or 0 if audio output is unavailable. Main thread only.
+uint32_t start_output(Ring& ring, uint32_t preferredRate);
 // Suspends or resumes browser playback. Main thread only.
 void set_output_paused(bool paused);
 // Stops browser playback and waits until nothing reads the ring any more. Main thread only.

@@ -375,6 +375,27 @@ loop also there:
 - freeverb's FTZ/DAZ (`libs/freeverb/include/freeverb/denormals.h`) falls back to a no-op with a
   `#warning`. Expect slower reverb only; profile it.
 
+**As built** (`src/dusk/web/audio.*`, `platforms/web/shell/audio-worklet.js`):
+- The mixer thread keeps about 43 ms buffered and renders in steps of about 5 ms. The worklet
+  plays whatever is in the ring and wakes the mixer as it frees space, so the browser's clock
+  paces the game's audio.
+- **Browser playback rate:** 48 kHz when the browser allows it. Otherwise the `AudioContext` runs
+  at the device's rate, and the game's SDL stream resamples to it.
+- **States:**
+  - **Before audio is allowed** (no user gesture yet), the mixer renders in real time and drops
+    the output, so `stopSync` never waits on audio that isn't running.
+  - **While the game is paused, or the page is hidden** (no animation frames, so the game is
+    frozen), nothing is rendered and the `AudioContext` is suspended.
+- Output is stereo. The Audio Debug window has a "Web output" tab with the rate, buffer level and
+  underruns.
+- **Tests:**
+  - The ring and mixer natively, including under TSan.
+  - The worklet against an `OfflineAudioContext`.
+  - `platforms/web/tests/web-audio/run.mjs`: the whole path with a real `AudioContext` in
+    Chromium — sine through the mixer, pause, hidden page, shutdown — once normally and once in a
+    browser that refuses 48 kHz.
+- **Not yet heard with the game's own audio,** which needs a real disc.
+
 ### 7. Filesystem, config and saves — M
 
 **Today.**

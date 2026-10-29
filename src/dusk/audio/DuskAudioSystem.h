@@ -32,4 +32,16 @@ namespace dusk::audio {
     u32 GetResetCount(int channelIdx);
 
     f32 VolumeFromU16(u16 value);
+
+#ifdef __EMSCRIPTEN__
+    // The browser output's state, for the audio debug window.
+    struct WebOutputStats {
+        u32 sampleRate;      // 0 without audio output
+        bool playing;        // the browser is pulling audio
+        bool hidden;         // the page is hidden, which pauses the game and its audio
+        u32 bufferedFrames;
+        u32 underrunFrames;  // frames the browser had to fill with silence
+    };
+    WebOutputStats GetWebOutputStats();
+#endif
 }

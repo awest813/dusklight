@@ -248,6 +248,9 @@ platforms/web/tests/run-native-tests.sh build/web/_deps/sdl-src
 node platforms/web/tests/shell-test.mjs
 ```
 
+`node platforms/web/tests/web-audio/run.mjs` (with Emscripten activated) plays audio through the
+web audio output in headless Chromium.
+
 After building, `platforms/web/tests/run-page.mjs build/web` checks that the prelaunch screen renders
 in headless Chromium; with `--disc <image> --expect-log <regex>` it boots a disc image, such as the
 data-free one `platforms/web/tests/make-synthetic-disc.py` writes.

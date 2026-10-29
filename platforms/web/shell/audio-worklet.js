@@ -1,12 +1,13 @@
 // Plays the game's audio from the ring buffer its mixer thread fills in shared wasm memory
 // (src/dusk/web/audio.cpp). Header, as 32-bit words: [0] frames read, [1] frames written (both
-// free-running), [2] playing, [3] underrun frames. Samples are interleaved float32; the ring's
-// capacity in frames is a power of two.
+// free-running), [2] playing, [3] underrun frames, [4] page hidden. Samples are interleaved
+// float32; the ring's capacity in frames is a power of two.
 class DuskAudioProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const { memory, header, data, frames, channels } = options.processorOptions;
-    Object.assign(this, { memory, header, data, frames, channels, buffer: null });
+    // Underruns count only once audio has started; the ring is empty until the mixer's first fill.
+    Object.assign(this, { memory, header, data, frames, channels, buffer: null, started: false });
   }
 
   process(inputs, outputs) {
@@ -26,7 +27,8 @@ class DuskAudioProcessor extends AudioWorkletProcessor {
       for (let c = 0; c < out.length; ++c) out[c][i] = this.samples[base + Math.min(c, this.channels - 1)];
     }
     for (let c = 0; c < out.length; ++c) out[c].fill(0, count);
-    if (count < n) this.ring[3] += n - count;
+    if (count > 0) this.started = true;
+    if (count < n && this.started) Atomics.add(this.ring, 3, n - count);
     Atomics.store(this.ring, 0, (read + count) >>> 0);
     // Wakes the mixer thread waiting for room.
     Atomics.notify(this.wake, 0);

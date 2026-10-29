@@ -345,6 +345,11 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           cmake --build --preset web
 
+      - name: Test web audio output in headless Chromium
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/web-audio/run.mjs
+
       - name: Smoke test in headless Chromium (no disc, prelaunch screen)
         run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/run-page.mjs build/web
 
