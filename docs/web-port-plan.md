@@ -520,4 +520,89 @@ with COOP/COEP, plus an offscreen canvas shim. Phases that need a disc are verif
 
 ## Progress
 
-Nothing below has been compiled with Emscripten yet; see each item.
+**Nothing has been linked with Emscripten yet.** The session that wrote this code could not
+install the Emscripten toolchain. Instead, every web source was syntax-checked as wasm32 with
+`__EMSCRIPTEN__`, using the host clang against Emscripten's system headers and the emdawnwebgpu
+headers that 6.0.13 pins. The first real build is CI's `build-web` job; it runs once GitHub Actions
+is enabled on the repository. Expect link-time issues there.
+
+### Done
+
+- **Portability fixes (Phase 1), all native-safe:**
+  - `include/helpers/endian.h` recognises wasm as little-endian. Before, `BSWAP16/32` were no-ops
+    there and `BSWAP64` was undefined.
+  - The mod SDK record-size asserts follow pointer size (`sdk/include/mods/api.h`).
+  - `OSSleepThread`/`OSWakeupThread` change thread state under the queue mutex, so a wakeup can no
+    longer be lost between the sleeper's check and its wait.
+  - The mods graphics service no longer calls Dawn-only `Device::GetAdapter`/`Adapter::GetInstance`
+    on the web.
+- **aurora and borealis patches (Phase 2–3),** carried in `platforms/web/patches` and applied at
+  configure time by `platforms/web/apply-patches.sh`. Both apply cleanly to the pinned submodule
+  commits.
+  - **aurora:** MKWiii's changes ported to `3227d76`, plus:
+    - `aurora_dvd_open_io`;
+    - no nod preloader thread;
+    - no `SDL_WaitEvent` while paused;
+    - a skipped frame waits for the next animation frame;
+    - `<webgpu/webgpu_cpp.h>` in the RmlUi headers;
+    - Freetype kept for RmlUi.
+  - **borealis:** `borealis::io::register_scheme`, so apps can expose non-file locations.
+- **Disc (Phase 4):**
+  - `platforms/web/nod_iso` reads plain GameCube ISO/GCM behind nod's C API, as decided for the
+    case where nod has no wasm build. Wii and compressed images are rejected with a message.
+  - `src/dusk/web/disc.*`: the disc is `webdisc://<name>`, read through a request slot in shared
+    wasm memory. `platforms/web/shell/disc-worker.js` serves it, so any game thread can read
+    synchronously and nothing waits on the main thread.
+- **Page (Phase 4–5):** `platforms/web/shell`.
+  - Browser checks.
+  - The disc picker, with the player choosing to keep a copy in OPFS or use the file for the
+    session.
+  - Save backup and restore (zip).
+  - A fatal-error overlay with log download.
+  - `serve.mjs` and `_headers` for COOP/COEP.
+  - User data persists through WasmFS's OPFS backend mounted at SDL's preference path
+    (`/libsdl`).
+- **Audio (Phase 5):** a mixer thread renders into a ring in shared memory, played by
+  `audio-worklet.js`. Details are in `src/dusk/web/audio.hpp`.
+- **Build:**
+  - `platforms/web/cmake/WebOptions.cmake` and the `web` presets.
+  - Link settings: JSPI, pthreads with a prespawned pool, WasmFS, page-owned memory,
+    `GLOBAL_BASE` above aurora's 64 KiB texture sentinel.
+  - Code mods off.
+  - The CI job `build-web`.
+- **Tests:**
+  - `platforms/web/tests/run-native-tests.sh` runs `nod_iso`, the disc channel and the audio
+    ring/mixer natively under ASan/UBSan. The channel and mixer also ran under TSan.
+  - `platforms/web/tests/shell-test.mjs` runs the page in headless Chromium against a stand-in
+    module. It covers:
+    - both storage modes, reusing a stored disc, and removing it;
+    - reads through the channel;
+    - image checks;
+    - backup/restore;
+    - the audio worklet;
+    - the unsupported-browser message.
+
+### Found along the way
+
+- After a reload, the previous page's disc worker can still hold the OPFS access handle. The new
+  worker retries, and the page terminates its worker on `pagehide`.
+- SDL3's Emscripten audio runs the stream callback on the browser main thread. With Dusklight's
+  mixer that would deadlock in `Z2SoundMgr::stopSync`, hence the mixer thread.
+- In optimized builds, Emscripten places static data at 1024, below aurora's `has_data()`
+  sentinel, hence `-sGLOBAL_BASE=65536`.
+
+### Next
+
+- The first real build (CI `build-web`, or locally with emsdk): fix compile and link errors, then
+  confirm the prelaunch UI renders in headless Chromium (Phase 3 exit). Reuse MKWiii's
+  `browser-harness.mjs`, which swaps in an offscreen canvas because SwiftShader has no swap chain
+  in headless mode.
+- **Boot to the title screen from a real disc (Phase 4 exit).** Watch for:
+  - JSPI and WebGPU feature gaps (`TextureComponentSwizzle`, compatibility limits);
+  - V8's native stack limit on deep game call chains;
+  - thread pool exhaustion.
+- **Frame pacing.** Present waits for `requestAnimationFrame`, and the 30 fps `waitForTick` sleep
+  stacks on top of it when interpolation is off.
+- **Wii discs and compressed formats**, if a threaded wasm build of nod becomes possible.
+- **The borealis HTTP backend over `fetch`,** for the mod catalog. CORS on twilitrealm.dev is
+  needed.

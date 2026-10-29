@@ -82,7 +82,7 @@ function(dusk_configure_web_target target)
             # placeholder IDs (lib/gfx/texture.hpp, has_data()).
             -sGLOBAL_BASE=65536
             -sSTACK_SIZE=8MB
-            -sDEFAULT_PTHREAD_STACK_SIZE=1MB
+            -sDEFAULT_PTHREAD_STACK_SIZE=2MB
             # Game threads (DVD, ARAM, decompression, audio streaming, memory card, movies), the
             # aurora DVD worker, the borealis task pool and WasmFS's OPFS worker. A thread that is
             # not prespawned cannot start while the main thread waits on it.

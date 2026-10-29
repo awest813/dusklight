@@ -142,7 +142,7 @@ index a352797..1e3f9ed 100644
   * Close the disc image and free all resources.
   */
 diff --git a/lib/aurora.cpp b/lib/aurora.cpp
-index 9430842..dbc42e7 100644
+index 9430842..926ed5b 100644
 --- a/lib/aurora.cpp
 +++ b/lib/aurora.cpp
 @@ -13,6 +13,7 @@
@@ -153,7 +153,31 @@ index 9430842..dbc42e7 100644
  #include <webgpu/webgpu_cpp.h>
  #endif
  
-@@ -380,7 +381,11 @@ void end_frame() noexcept {
+@@ -233,7 +234,23 @@ const AuroraEvent* update() noexcept {
+   return window::poll_events();
+ }
+ 
++static bool begin_frame_impl() noexcept;
++
+ bool begin_frame() noexcept {
++#ifdef __EMSCRIPTEN__
++  // A frame that is not drawn is not presented either, which is otherwise where the main loop
++  // yields to the browser.
++  const bool began = begin_frame_impl();
++  if (!began) {
++    webgpu::web::wait_for_animation_frame();
++  }
++  return began;
++#else
++  return begin_frame_impl();
++#endif
++}
++
++static bool begin_frame_impl() noexcept {
+   ZoneScoped;
+ #ifdef AURORA_ENABLE_GX
+   {
+@@ -380,7 +397,11 @@ void end_frame() noexcept {
        {
          window::SurfaceLock surfaceLock;
          if (window::is_presentable()) {
@@ -540,10 +564,10 @@ index b3ae6cd..7112bf6 100644
  
 diff --git a/lib/webgpu/web_extensions.cpp b/lib/webgpu/web_extensions.cpp
 new file mode 100644
-index 0000000..ba2a7ce
+index 0000000..ac69ff4
 --- /dev/null
 +++ b/lib/webgpu/web_extensions.cpp
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,111 @@
 +#include "web_extensions.hpp"
 +#include "gpu.hpp"
 +
@@ -612,6 +636,8 @@ index 0000000..ba2a7ce
 +
 +void yield_to_browser() { aurora_web_yield_to_browser(); }
 +
++void wait_for_animation_frame() { aurora_web_wait_for_animation_frame(); }
++
 +wgpu::TextureFormat preferred_canvas_format() {
 +  // The spec allows only these two.
 +  return aurora_web_preferred_canvas_format_is_bgra() ? wgpu::TextureFormat::BGRA8Unorm
@@ -655,10 +681,10 @@ index 0000000..ba2a7ce
 +} // namespace aurora::webgpu
 diff --git a/lib/webgpu/web_extensions.hpp b/lib/webgpu/web_extensions.hpp
 new file mode 100644
-index 0000000..848dee1
+index 0000000..ab3f812
 --- /dev/null
 +++ b/lib/webgpu/web_extensions.hpp
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,40 @@
 +#pragma once
 +
 +// Browser WebGPU features that the emdawnwebgpu port bundled with Emscripten does not wrap yet.
@@ -687,6 +713,10 @@ index 0000000..848dee1
 +// "block until the GPU makes progress", since WebGPU callbacks are only delivered from the event
 +// loop. Returns after roughly one task, not after any particular event; callers re-check.
 +void yield_to_browser();
++
++// Suspends the calling stack (JSPI) until the next animation frame: how an iteration of the main
++// loop that draws nothing (paused, or no surface) lets the browser run.
++void wait_for_animation_frame();
 +
 +// Surface::Present. A canvas shows its current texture when the page renders, so this suspends the
 +// calling stack (JSPI) until the next animation frame; the frame submitted before it is what the

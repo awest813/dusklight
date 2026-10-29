@@ -211,6 +211,35 @@ Alternate presets available:
 * `windows-clang-relwithdebinfo`: Clang-cl, RelWithDebInfo
 * `windows-clang-debug`: Clang-cl, Debug
 
+**ninja (Web, experimental)**
+
+The browser build is a work in progress; see [the web port plan](web-port-plan.md). It needs
+[Emscripten](https://emscripten.org/docs/getting_started/downloads.html) 6.0.13 activated in your
+shell:
+
+```sh
+git clone https://github.com/emscripten-core/emsdk.git
+emsdk/emsdk install 6.0.13
+emsdk/emsdk activate 6.0.13
+source emsdk/emsdk_env.sh
+```
+
+```sh
+cmake --preset web
+cmake --build --preset web
+```
+
+Configuring applies `platforms/web/patches` to `extern/aurora` and `extern/borealis`. The page,
+`dusklight.js`, `.wasm` and `.data` end up in `build/web`.
+
+The host-side tests of the web port need only a C++ compiler and, for the page test, Node and
+Playwright's Chromium:
+
+```sh
+platforms/web/tests/run-native-tests.sh
+node platforms/web/tests/shell-test.mjs
+```
+
 ## Running
 
 **Windows / Linux**
@@ -230,3 +259,15 @@ macOS builds an `.app` bundle which contains the executable and all necessary re
 ```sh
 build/{preset}/Dusklight.app/Contents/MacOS/Dusklight --dvd /path/to/game.iso
 ```
+
+**Web**
+
+The page must be served with cross-origin isolation headers (`platforms/web/shell/_headers`). Serve
+the build locally, then open http://localhost:8080/ in Chrome or Edge:
+
+```sh
+node build/web/serve.mjs build/web 8080
+```
+
+The page asks for an uncompressed GameCube disc image (ISO/GCM). You can keep a copy in the
+browser's storage, or choose the file again on each visit.

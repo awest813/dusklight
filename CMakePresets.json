@@ -562,6 +562,27 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-windows"
       }
+    },
+    {
+      "name": "web",
+      "displayName": "Web (Emscripten)",
+      "description": "Browser build; needs an activated emsdk (EMSDK set). See docs/building.md.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+      }
+    },
+    {
+      "name": "web-relwithdebinfo",
+      "displayName": "Web (Emscripten, RelWithDebInfo)",
+      "inherits": [
+        "web"
+      ],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
     }
   ],
   "buildPresets": [
@@ -773,6 +794,20 @@
       "displayName": "(Internal) Windows CI MSVC arm64",
       "targets": [
         "install"
+      ]
+    },
+    {
+      "name": "web",
+      "configurePreset": "web",
+      "targets": [
+        "dusklight"
+      ]
+    },
+    {
+      "name": "web-relwithdebinfo",
+      "configurePreset": "web-relwithdebinfo",
+      "targets": [
+        "dusklight"
       ]
     }
   ]

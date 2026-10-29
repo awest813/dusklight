@@ -298,3 +298,60 @@ jobs:
             build/install/mods/
             build/install/debug.7z
             build/install/sdk/
+
+  build-web:
+    name: Build Web (Emscripten)
+    runs-on: ubuntu-latest
+    env:
+      EMSDK_VERSION: 6.0.13
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install ninja-build
+
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSDK_VERSION"
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" playwright
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+
+      # Host-side pieces of the web port that don't need Emscripten.
+      - name: Test the ISO reader and web audio natively
+        run: platforms/web/tests/run-native-tests.sh
+
+      - name: Test the page in headless Chromium
+        run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/shell-test.mjs
+
+      - name: Configure CMake
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          cmake --preset web
+
+      - name: Build
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          cmake --build --preset web
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dusklight-${{env.APP_VERSION}}-web
+          path: |
+            build/web/*.html
+            build/web/*.js
+            build/web/*.wasm
+            build/web/*.data
+            build/web/*.css
+            build/web/_headers
