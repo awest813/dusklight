@@ -41,6 +41,20 @@ int fpcM_Execute(void* i_proc) {
     return fpcEx_Execute((base_process_class*)i_proc);
 }
 
+#if TARGET_PC
+// The process iterators call their callbacks with two arguments and use the int result. Calling
+// fpcM_Draw/fpcM_Execute through those types is undefined (WebAssembly traps on it), so they get
+// adapters of the exact type. The iterators only combine the results into a success flag.
+int fpcM_DrawQueue(void* i_proc, void*) {
+    fpcM_Draw(i_proc);
+    return 1;
+}
+
+int fpcM_ExecuteQueue(void* i_proc, void*) {
+    return fpcM_Execute(i_proc);
+}
+#endif
+
 int fpcM_Delete(void* i_proc) {
     return fpcDt_Delete((base_process_class*)i_proc);
 }
@@ -101,11 +115,11 @@ void fpcM_Management(fpcM_ManagementFunc i_preExecuteFn, fpcM_ManagementFunc i_p
             }
 
             if (!fapGm_HIO_c::isCaptureScreen()) {
-                fpcEx_Handler((fpcLnIt_QueueFunc)fpcM_Execute);
+                fpcEx_Handler(DUSK_IF_ELSE(fpcM_ExecuteQueue, (fpcLnIt_QueueFunc)fpcM_Execute));
             }
 
             if (!fapGm_HIO_c::isCaptureScreen() || fapGm_HIO_c::getCaptureScreenDivH() != 1) {
-                fpcDw_Handler((fpcDw_HandlerFuncFunc)fpcM_DrawIterater, (fpcDw_HandlerFunc)fpcM_Draw);
+                fpcDw_Handler((fpcDw_HandlerFuncFunc)fpcM_DrawIterater, DUSK_IF_ELSE(fpcM_DrawQueue, (fpcDw_HandlerFunc)fpcM_Draw));
             }
 
             IF_DUSK(dComIfGp_drawSimpleModel());
@@ -141,10 +155,25 @@ void fpcM_Init() {
     fpcLn_Create();
 }
 
+#if TARGET_PC
+int fpcM_CallCreateReqFunc(void* i_proc, void* i_createFunc) {
+    return ((FastCreateReqFunc)i_createFunc)(i_proc);
+}
+#endif
+
 base_process_class* fpcM_FastCreate(s16 i_procname, FastCreateReqFunc i_createReqFunc,
                                     void* i_createData, void* i_append) {
+#if TARGET_PC
+    // See fpcM_CallCreateReqFunc. i_createData was only ever passed to i_createReqFunc, which
+    // ignores it.
+    (void)i_createData;
+    return fpcFCtRq_Request(fpcLy_CurrentLayer(), i_procname,
+                            i_createReqFunc != NULL ? fpcM_CallCreateReqFunc : NULL,
+                            (void*)i_createReqFunc, i_append);
+#else
     return fpcFCtRq_Request(fpcLy_CurrentLayer(), i_procname, (fstCreateFunc)i_createReqFunc,
                             i_createData, i_append);
+#endif
 }
 
 int fpcM_IsPause(void* i_proc, u8 i_flag) {

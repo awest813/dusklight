@@ -42,9 +42,23 @@ inline s16 fpcM_GetProfName(const void* i_process) {
     return ((base_process_class*)i_process)->profname;
 }
 
+#if TARGET_PC
+// Create requests call their function with two arguments (the process and the request's data),
+// but FastCreateReqFunc takes one; calling it through the two-argument type is undefined
+// (WebAssembly traps on it). So the function travels in the data argument, which only exists to be
+// passed to it, and this calls it.
+int fpcM_CallCreateReqFunc(void* i_proc, void* i_createFunc);
+#endif
+
 inline fpc_ProcID fpcM_Create(s16 i_procName, FastCreateReqFunc i_createFunc, void* i_append) {
+#if TARGET_PC
+    return fpcSCtRq_Request(fpcLy_CurrentLayer(), i_procName,
+                            i_createFunc != NULL ? fpcM_CallCreateReqFunc : NULL, (void*)i_createFunc,
+                            i_append);
+#else
     return fpcSCtRq_Request(fpcLy_CurrentLayer(), i_procName, (stdCreateFunc)i_createFunc, NULL,
                             i_append);
+#endif
 }
 
 inline int fpcM_DrawPriority(const void* i_process) {
@@ -102,6 +116,10 @@ inline process_node_class* fpcM_Layer(void* i_process) {
 void fpcM_Draw(void* i_process);
 int fpcM_DrawIterater(fpcM_DrawIteraterFunc i_drawIterFunc);
 int fpcM_Execute(void* i_process);
+#if TARGET_PC
+int fpcM_DrawQueue(void* i_process, void*);
+int fpcM_ExecuteQueue(void* i_process, void*);
+#endif
 int fpcM_Delete(void* i_process);
 BOOL fpcM_IsCreating(fpc_ProcID i_id);
 void fpcM_Management(fpcM_ManagementFunc i_preExecuteFn, fpcM_ManagementFunc i_postExecuteFn);

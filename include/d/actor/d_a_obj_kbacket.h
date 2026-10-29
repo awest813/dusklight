@@ -133,7 +133,7 @@ public:
     int Delete();
     int Execute();
     int Draw();
-    static void createHeapCallBack(fopAc_ac_c*);
+    static DUSK_IF_ELSE(int, void) createHeapCallBack(fopAc_ac_c*);
     void setEnvTevColor();
     void setRoomNo();
     void reset();

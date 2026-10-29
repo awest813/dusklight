@@ -63,6 +63,16 @@ int fpcNd_Execute(process_node_class* i_procNode) {
 
 DUSK_GAME_DATA int g_fpcNd_type;
 
+#if TARGET_PC
+void* fpcNd_IsCreatingFromUnder(void* i_procNode);
+
+// fpcLyIt_Judge calls its judge with two arguments; calling the one-argument function through that
+// type is undefined (WebAssembly traps on it).
+static void* fpcNd_IsCreatingFromUnderJudge(void* i_procNode, void*) {
+    return fpcNd_IsCreatingFromUnder(i_procNode);
+}
+#endif
+
 void* fpcNd_IsCreatingFromUnder(void* i_procNode) {
     if (i_procNode != NULL && fpcBs_Is_JustOfType(g_fpcNd_type, ((process_node_class*)i_procNode)->base.subtype) != FALSE)
     {
@@ -70,7 +80,7 @@ void* fpcNd_IsCreatingFromUnder(void* i_procNode) {
         layer = &((process_node_class*)i_procNode)->layer;
         if (fpcLy_IsCreatingMesg(layer) == FALSE) {
             return (process_node_class*)fpcLyIt_Judge(
-                layer, (fpcLyIt_JudgeFunc)fpcNd_IsCreatingFromUnder, NULL);
+                layer, DUSK_IF_ELSE(fpcNd_IsCreatingFromUnderJudge, (fpcLyIt_JudgeFunc)fpcNd_IsCreatingFromUnder), NULL);
         } else {
             return i_procNode;
         }

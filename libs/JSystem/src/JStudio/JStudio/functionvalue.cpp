@@ -251,7 +251,14 @@ f64 TFunctionValue_composite::getValue(f64 arg1) {
     ASSERT(!refer_isReferring(this));
     ASSERT(pfn_ != NULL);
 
+#if TARGET_PC
+    // pfn_ holds a CompositeFunc (data_set). Calling it through UnkFunc, with the arguments in a
+    // different order, only works where floats and pointers travel in separate registers; it is
+    // undefined, and traps in WebAssembly. So call it with its own type.
+    return ((CompositeFunc)pfn_)(*container, *data_getData(), arg1);
+#else
     return pfn_(arg1, container, data_getData());
+#endif
 }
 
 f64 TFunctionValue_composite::composite_raw(TVector_pointer<TFunctionValue*> const& param_1,

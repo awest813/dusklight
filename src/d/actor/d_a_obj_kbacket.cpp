@@ -540,8 +540,10 @@ int daObj_KBacket_c::Draw() {
     return 1;
 }
 
-void daObj_KBacket_c::createHeapCallBack(fopAc_ac_c* param_0) {
-    ((daObj_KBacket_c*)param_0)->CreateHeap();
+// Used as a heapCallbackFunc, which returns int: on GameCube the caller saw CreateHeap()'s result,
+// left in r3. On PC it is returned (calling a void function through an int one traps on the web).
+DUSK_IF_ELSE(int, void) daObj_KBacket_c::createHeapCallBack(fopAc_ac_c* param_0) {
+    IF_DUSK(return) ((daObj_KBacket_c*)param_0)->CreateHeap();
 }
 
 void daObj_KBacket_c::setEnvTevColor() {

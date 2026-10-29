@@ -60,6 +60,10 @@ int fpcDt_ToQueue(base_process_class* i_proc) {
     return 0;
 }
 
+#if TARGET_PC
+static int fpcDt_ToDeleteQIter(void* i_proc, void*);
+#endif
+
 int fpcDt_ToDeleteQ(base_process_class* i_proc) {
     if (i_proc->unk_0xA == 1) {
         return 0;
@@ -80,7 +84,7 @@ int fpcDt_ToDeleteQ(base_process_class* i_proc) {
             JUT_ASSERT(196, FALSE);
         }
 
-        if (fpcLyIt_OnlyHereLY(layer, (fpcLyIt_OnlyHereFunc)fpcDt_ToDeleteQ, NULL) == 0)
+        if (fpcLyIt_OnlyHereLY(layer, DUSK_IF_ELSE(fpcDt_ToDeleteQIter, (fpcLyIt_OnlyHereFunc)fpcDt_ToDeleteQ), NULL) == 0)
         {
             return 0;
         }
@@ -103,6 +107,14 @@ int fpcDt_ToDeleteQ(base_process_class* i_proc) {
 
     return 0;
 }
+
+#if TARGET_PC
+// The layer iterator calls with two arguments; calling fpcDt_ToDeleteQ through that type is
+// undefined (WebAssembly traps on it).
+static int fpcDt_ToDeleteQIter(void* i_proc, void*) {
+    return fpcDt_ToDeleteQ((base_process_class*)i_proc);
+}
+#endif
 
 int fpcDt_Delete(void* i_proc) {
     if (i_proc != NULL) {

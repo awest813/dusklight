@@ -120,13 +120,21 @@ BOOL fpcCtRq_Do(create_request* i_request) {
     return 1;
 }
 
+#if TARGET_PC
+// fpcCtIt_Method calls with two arguments; calling fpcCtRq_Do through that type is undefined
+// (WebAssembly traps on it).
+static int fpcCtRq_DoIter(void* i_request, void*) {
+    return fpcCtRq_Do((create_request*)i_request);
+}
+#endif
+
 int fpcCtRq_Handler() {
 #if DEBUG
     if (g_fpcDbSv_service[3] != NULL) {
         g_fpcDbSv_service[3](&g_fpcCtTg_Queue.mSize);
     }
 #endif
-    return fpcCtIt_Method((fpcCtIt_MethodFunc)fpcCtRq_Do, NULL);
+    return fpcCtIt_Method(DUSK_IF_ELSE(fpcCtRq_DoIter, (fpcCtIt_MethodFunc)fpcCtRq_Do), NULL);
 }
 
 create_request* fpcCtRq_Create(layer_class* i_layer, u32 i_size, create_request_method_class* i_methods) {

@@ -326,7 +326,7 @@ void main01(void) {
 
             const float step = timing.interpolating ? dusk::game_clock::sample_interpolation_step() : 1.0f;
             dusk::interp::begin_presentation(step);
-            fpcM_DrawIterater((fpcM_DrawIteraterFunc)fpcM_Draw);
+            fpcM_DrawIterater(fpcM_DrawQueue);
             cAPIGph_Painter();
             dusk::interp::end_presentation();
         } else {
