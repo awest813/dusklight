@@ -82,6 +82,7 @@ private:
 bool start_output(Ring& ring, uint32_t sampleRate);
 // Suspends or resumes browser playback. Main thread only.
 void set_output_paused(bool paused);
+// Stops browser playback and waits until nothing reads the ring any more. Main thread only.
 void stop_output();
 #endif
 

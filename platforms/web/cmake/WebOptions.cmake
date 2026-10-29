@@ -123,6 +123,8 @@ function(dusk_configure_web_target target)
                 "${DUSK_WEB_DIR}/shell/shell.css"
                 "${DUSK_WEB_DIR}/shell/disc-worker.js"
                 "${DUSK_WEB_DIR}/shell/audio-worklet.js"
+                "${CMAKE_SOURCE_DIR}/res/logo.png"
+                "${CMAKE_SOURCE_DIR}/res/icon.png"
                 "${DUSK_WEB_DIR}/shell/_headers"
                 "${DUSK_WEB_DIR}/shell/serve.mjs"
                 "$<TARGET_FILE_DIR:${target}>"

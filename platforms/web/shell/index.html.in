@@ -5,12 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dusklight</title>
 <link rel="stylesheet" href="shell.css">
+<link rel="icon" href="icon.png">
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" hidden></canvas>
 
 <main id="setup">
-  <h1>Dusklight</h1>
+  <h1><img src="logo.png" alt="Dusklight" width="2310" height="495"></h1>
   <p class="lede">A reimplementation of Twilight Princess, running in your browser. You need your own
     copy of the game: Dusklight does not include any game data, and your disc image never leaves
     this device.</p>

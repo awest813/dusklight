@@ -38,6 +38,7 @@ async function openSource(source) {
     const handle = await dir.getFileHandle(source.name);
     const access = await openAccessHandle(handle);
     let shared = true;
+    let scratch = new Uint8Array(0);
     return {
       size: access.getSize(),
       read(offset, view) {
@@ -50,9 +51,9 @@ async function openSource(source) {
             shared = false;
           }
         }
-        const copy = new Uint8Array(view.length);
-        const n = access.read(copy, { at: offset });
-        view.set(copy.subarray(0, n));
+        if (scratch.length < view.length) scratch = new Uint8Array(view.length);
+        const n = access.read(scratch.subarray(0, view.length), { at: offset });
+        view.set(scratch.subarray(0, n));
         return n;
       },
     };

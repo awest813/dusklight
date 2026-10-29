@@ -11,6 +11,9 @@
 
 body { margin: 0; background: var(--bg); color: var(--text); }
 
+/* Rules below set display on some elements; keep the hidden attribute authoritative. */
+[hidden] { display: none !important; }
+
 canvas { display: block; width: 100vw; height: 100vh; outline: none; }
 
 main {
@@ -20,7 +23,8 @@ main {
   padding: 3rem 1rem;
 }
 
-h1 { margin: 0 0 0.5rem; font-size: 2rem; letter-spacing: 0.02em; }
+h1 { margin: 0 0 1rem; font-size: 2rem; letter-spacing: 0.02em; }
+h1 img { display: block; width: 100%; max-width: 28rem; height: auto; }
 h2 { margin: 2rem 0 0.5rem; font-size: 1.1rem; }
 .lede, small { color: var(--muted); }
 small { display: block; font-size: 0.85rem; }

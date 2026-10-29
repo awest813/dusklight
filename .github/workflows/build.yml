@@ -327,10 +327,6 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/pw" playwright
           "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
 
-      # Host-side pieces of the web port that don't need Emscripten.
-      - name: Test the ISO reader and web audio natively
-        run: platforms/web/tests/run-native-tests.sh
-
       - name: Test the page in headless Chromium
         run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/shell-test.mjs
 
@@ -338,6 +334,11 @@ jobs:
         run: |
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           cmake --preset web
+
+      # Host-side pieces of the web port, built natively. The disc channel test builds SDL3 from
+      # the source the web configure step fetched.
+      - name: Test the ISO reader, web audio and the disc channel natively
+        run: platforms/web/tests/run-native-tests.sh build/web/_deps/sdl-src
 
       - name: Build
         run: |
@@ -364,4 +365,6 @@ jobs:
             build/web/*.wasm
             build/web/*.data
             build/web/*.css
+            build/web/*.png
+            build/web/serve.mjs
             build/web/_headers

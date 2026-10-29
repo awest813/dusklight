@@ -7,12 +7,12 @@
 // wasm build is needed: fake-module.js stands in for dusklight.js with the same contract the page
 // relies on (Module.wasmMemory, onRuntimeInitialized, _dusk_web_disc_channel, callMain), and reads
 // the disc from a worker exactly as a game thread does (src/dusk/web/disc.cpp).
-import { createServer } from 'node:http';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createIsolatedServer } from '../shell/serve.mjs';
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -50,23 +50,7 @@ async function makeSite() {
 }
 
 function serve(root, isolated) {
-  const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
-  const server = createServer(async (req, res) => {
-    if (isolated) {
-      res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-      res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-    }
-    let file = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
-    if (file.endsWith('/')) file += 'index.html';
-    try {
-      const data = await readFile(file);
-      res.setHeader('Content-Type', types[path.extname(file)] ?? 'application/octet-stream');
-      res.end(data);
-    } catch {
-      res.statusCode = 404;
-      res.end();
-    }
-  });
+  const server = createIsolatedServer(root, { isolated });
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () =>
     resolve({ server, base: `http://127.0.0.1:${server.address().port}/` })));
 }

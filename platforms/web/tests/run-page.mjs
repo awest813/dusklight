@@ -15,11 +15,11 @@
 // on the same device: the game's whole render and present path still runs, only the browser's
 // final compositing is skipped. The test passes when frames with visible content were presented
 // and the page reported no fatal error.
-import { createServer } from 'node:http';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
+import { createIsolatedServer } from '../shell/serve.mjs';
 
 const require = createRequire(import.meta.url);
 const argv = process.argv.slice(2);
@@ -40,24 +40,7 @@ while (argv.length) {
   }
 }
 
-const types = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
-  '.wasm': 'application/wasm',
-};
-const server = createServer(async (req, res) => {
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-  let file = path.join(buildDir, path.normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)));
-  if (file.endsWith(path.sep)) file = path.join(file, 'index.html');
-  try {
-    const data = await readFile(file);
-    res.setHeader('Content-Type', types[path.extname(file)] ?? 'application/octet-stream');
-    res.end(data);
-  } catch {
-    res.statusCode = 404;
-    res.end();
-  }
-});
+const server = createIsolatedServer(buildDir);
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}/`;
 
@@ -192,7 +175,7 @@ try {
     const frames = await page.evaluate(() => globalThis.duskTestFrames ?? 0);
     sample = await page.evaluate(() => globalThis.duskTestSampleFrame?.());
     console.log(`run-page: ${frames} frames presented; last frame ${JSON.stringify(sample)}`);
-    if (frames >= 30 && sample && sample.colours >= 8) break;
+    if (!expectLogs.length && frames >= 30 && sample && sample.colours >= 8) break;
   }
   if (expectLogs.length) {
     if (unmatched().length === 0) {

@@ -122,13 +122,15 @@ EM_ASYNC_JS(int, dusk_web_audio_start, (void* header, float* data, uint32_t fram
     ctx.onstatechange = playing;
     playing();
     // Browsers start audio only after a user gesture; resume on the next one if it is still waiting.
+    // A refused resume() just leaves audio waiting, so its rejection is ignored.
     const resume = () => {
-      if (ctx.state === 'suspended' && !Module['duskAudioPaused']) ctx.resume();
+      if (ctx.state === 'suspended' && !Module['duskAudioPaused']) ctx.resume().catch(() => {});
     };
-    for (const type of ['pointerdown', 'keydown', 'touchend']) {
+    const gestures = ['pointerdown', 'keydown', 'touchend'];
+    for (const type of gestures) {
       document.addEventListener(type, resume, { capture: true });
     }
-    Module['duskAudio'] = { ctx, node };
+    Module['duskAudio'] = { ctx, node, resume, gestures };
     resume();
     return 1;
   } catch (e) {
@@ -141,16 +143,21 @@ EM_JS(void, dusk_web_audio_set_paused, (int paused), {
   Module['duskAudioPaused'] = !!paused;
   const audio = Module['duskAudio'];
   if (audio) {
-    if (paused) audio.ctx.suspend(); else audio.ctx.resume();
+    (paused ? audio.ctx.suspend() : audio.ctx.resume()).catch(() => {});
   }
 });
 
-EM_JS(void, dusk_web_audio_stop, (), {
+// Resolves once the audio thread has stopped, so the ring it reads can be freed afterwards.
+EM_ASYNC_JS(void, dusk_web_audio_stop, (), {
   const audio = Module['duskAudio'];
-  if (audio) {
-    audio.ctx.close();
-    delete Module['duskAudio'];
+  if (!audio) return;
+  delete Module['duskAudio'];
+  for (const type of audio.gestures) {
+    document.removeEventListener(type, audio.resume, { capture: true });
   }
+  audio.ctx.onstatechange = null;
+  audio.node.disconnect();
+  await audio.ctx.close().catch(() => {});
 });
 
 bool start_output(Ring& ring, uint32_t sampleRate) {

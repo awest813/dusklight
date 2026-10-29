@@ -23,7 +23,9 @@ function remember(line) {
 }
 
 function formatSize(bytes) {
-  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${(bytes / 1e6).toFixed(0)} MB`;
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
 }
 
 function download(name, blob) {
@@ -398,7 +400,8 @@ async function setup() {
   $('import-saves').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
-    if (!file || !confirm('Restoring replaces saves and settings with the ones in the backup. Continue?')) return;
+    if (!file || !confirm('Restoring copies the saves and settings in the backup into this browser, overwriting ' +
+      'files with the same names. Continue?')) return;
     try {
       alert(`Restored ${await importSaves(file)} files.`);
     } catch (err) {

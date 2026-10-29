@@ -148,6 +148,8 @@ void dusk::audio::Reinitialize() {
 
 void dusk::audio::Shutdown() {
 #ifdef __EMSCRIPTEN__
+    // The worklet reads the ring until the browser's audio thread has stopped, which
+    // stop_output() waits for.
     WebMixer.reset();
     dusk::web::audio::stop_output();
     WebRing.reset();
