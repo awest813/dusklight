@@ -347,6 +347,13 @@ jobs:
       - name: Smoke test in headless Chromium (no disc, prelaunch screen)
         run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/run-page.mjs build/web
 
+      - name: Smoke test in headless Chromium (synthetic disc, game loop)
+        run: |
+          python3 platforms/web/tests/make-synthetic-disc.py "$RUNNER_TEMP/synthetic.iso"
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/run-page.mjs build/web \
+            --disc "$RUNNER_TEMP/synthetic.iso" --expect-log "Loaded game disc is GZ2E01" \
+            --expect-log "dScnLogo_c::create START"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:

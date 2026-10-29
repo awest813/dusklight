@@ -520,11 +520,35 @@ with COOP/COEP, plus an offscreen canvas shim. Phases that need a disc are verif
 
 ## Progress
 
-**Nothing has been linked with Emscripten yet.** The session that wrote this code could not
-install the Emscripten toolchain. Instead, every web source was syntax-checked as wasm32 with
-`__EMSCRIPTEN__`, using the host clang against Emscripten's system headers and the emdawnwebgpu
-headers that 6.0.13 pins. The first real build is CI's `build-web` job; it runs once GitHub Actions
-is enabled on the repository. Expect link-time issues there.
+**The web build builds and runs.** With Emscripten 6.0.13 it compiles and links: `dusklight.wasm`
+is 23 MB, plus 0.3 MB of JS and 7.9 MB of preloaded `res/`. In headless Chromium, with WebGPU on
+SwiftShader:
+
+- **Without a disc,** it renders the prelaunch screen (RmlUi).
+- **With a synthetic GameCube image** (`platforms/web/tests/make-synthetic-disc.py`, no game data),
+  the image goes through the page's picker, the disc worker, the shared-memory channel, `nod_iso`
+  and aurora's DVD layer. The game then identifies GZ2E01, enters the game loop, creates the logo
+  scene and keeps running. It waits on resources that a synthetic disc does not contain.
+- **Config, logs and the stored disc image** persist in OPFS across reloads.
+
+A real disc has not been tried; that is the next milestone.
+
+Fixed while getting there (see the commit history for details):
+
+- The page shares the module's own memory with its disc worker (`platforms/web/shell/pre.js`).
+  Emscripten ignores `Module.wasmMemory` in threaded builds.
+- RmlUi's stencil-only pipelines must not leave `depthWriteEnabled` unset. Browsers reject it and
+  the device is lost.
+- **Function-pointer signature mismatches,** which trap in wasm, in the process framework, the
+  cAPI table, a heap callback and JStudio's composite function values.
+  `platforms/web/tests/check-indirect-calls.py` lists the remaining casts whose wasm signatures
+  differ. Casts laundered through `void*` only show up at run time, so expect a few more once real
+  game data runs more code.
+- `nod_iso` must be compiled with the thread flags, and the page's fatal overlay must show the
+  real error.
+
+Hosts that can't download GitHub source archives can use `platforms/web/fetch-deps.sh` with
+`-DDUSK_WEB_DEPS_DIR`.
 
 ### Done
 
@@ -593,11 +617,8 @@ is enabled on the repository. Expect link-time issues there.
 
 ### Next
 
-- The first real build (CI `build-web`, or locally with emsdk): fix compile and link errors, then
-  confirm the prelaunch UI renders in headless Chromium (Phase 3 exit). Reuse MKWiii's
-  `browser-harness.mjs`, which swaps in an offscreen canvas because SwiftShader has no swap chain
-  in headless mode.
 - **Boot to the title screen from a real disc (Phase 4 exit).** Watch for:
+  - more function-signature traps on code paths the synthetic disc doesn't reach;
   - JSPI and WebGPU feature gaps (`TextureComponentSwizzle`, compatibility limits);
   - V8's native stack limit on deep game call chains;
   - thread pool exhaustion.
