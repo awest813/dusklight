@@ -628,6 +628,40 @@ Hosts that can't download GitHub source archives can use `platforms/web/fetch-de
     - the audio worklet;
     - the unsupported-browser message.
 
+### Performance
+
+Measured in headless Chromium with WebGPU on SwiftShader, so frame rates say little about real
+GPUs. Main-thread CPU use and startup are representative.
+`platforms/web/tests/profile-page.mjs` profiles the page's main thread.
+
+- **Fixed: GPU waits spun the main thread.** While aurora waited for the GPU (a staging buffer to
+  map, a free frame slot), `wait_for_gpu_progress` yielded through a `MessageChannel` and checked
+  again at once, which kept the main thread about 93% busy for as long as the GPU was behind. It
+  now sleeps until the queue's submitted work is done (`wait_for_gpu_work` in the aurora patch). The
+  main thread went from 7% to 83% idle on the prelaunch screen, and frames got slightly faster,
+  since the spin no longer competes with the GPU process.
+- **Fixed: frame-limiter sleeps were too coarse.** Browsers round short `setTimeout`s, and so
+  `emscripten_sleep` and `SDL_Delay`, up to about 4 ms (a 1 ms sleep took 3.8 ms on average).
+  `Limiter::NanoSleep` uses `Atomics.waitAsync` on the web instead (1.1 ms).
+- **Startup:** the page downloads, compiles and initializes the module, including its 24-thread
+  pool, while the player is still choosing a disc.
+  - Cold start, page open to the game's `main()`: about 0.9 s locally.
+  - After a few seconds on the picker, clicking Play reaches `main()` in about 0.1 s.
+  - `serve.mjs` sends ETags, so repeat visits come from the HTTP cache, which also lets Chrome
+    reuse its compiled code. Hosts like Cloudflare Pages and Netlify revalidate by default.
+- **Wasm SIMD** (`-msimd128`) is on, so the compiler can vectorize loops.
+- **Size:** `dusklight.wasm` is 23.4 MB, 7.2 MB gzipped. Function names (`--profiling-funcs`, for
+  readable crash reports) cost about 0.4 MB of that once compressed, and stay. `dusklight.data`
+  (`res/`) is 7.9 MB.
+- **Kept: memory growth's JS-side check.** With threads, every JS access to the memory first checks
+  whether it grew. `-sGROWABLE_ARRAYBUFFERS` would avoid that, but Chromium's WebGPU rejects views
+  of resizable buffers, which the WebGPU bindings pass on most calls.
+- **Still to measure with real game data:**
+  - the main thread's budget per frame (game logic and GX command processing now share it with
+    WebGPU submission);
+  - pipeline compilation hitches;
+  - the audio mixer's cost.
+
 ### Found along the way
 
 - After a reload, the previous page's disc worker can still hold the OPFS access handle. The new

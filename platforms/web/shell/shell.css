@@ -60,6 +60,15 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button:disabled { opacity: 0.5; cursor: default; }
 
 .error { color: var(--error); }
+
+#loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  pointer-events: none;
+}
 progress { width: 100%; }
 
 #fatal {

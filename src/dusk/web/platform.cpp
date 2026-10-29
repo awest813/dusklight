@@ -23,4 +23,17 @@ void initialize() {
 
 void reload() { emscripten_run_script("location.reload()"); }
 
+EM_ASYNC_JS(void, dusk_web_precise_sleep, (double milliseconds), {
+  // Atomics.waitAsync's timeout isn't subject to setTimeout's clamping.
+  Module['duskSleepCell'] ??= new Int32Array(new SharedArrayBuffer(4));
+  await Atomics.waitAsync(Module['duskSleepCell'], 0, 0, milliseconds).value;
+});
+
+void precise_sleep(uint64_t nanoseconds) {
+    if (nanoseconds == 0) {
+        return;
+    }
+    dusk_web_precise_sleep(static_cast<double>(nanoseconds) / 1e6);
+}
+
 }  // namespace dusk::web

@@ -34,10 +34,11 @@ if (DUSK_WEB_DEPS_DIR)
     endforeach ()
 endif ()
 
-# Everything (including dusk_nod_iso below) is built with wasm threads (game threads are pthreads), native wasm exceptions and
-# wasm setjmp/longjmp (libpng).
-add_compile_options(-pthread -fwasm-exceptions -sSUPPORT_LONGJMP=wasm)
-add_link_options(-pthread -fwasm-exceptions -sSUPPORT_LONGJMP=wasm)
+# Everything (including dusk_nod_iso below) is built with wasm threads (game threads are pthreads),
+# native wasm exceptions, wasm setjmp/longjmp (libpng) and 128-bit SIMD, which the compiler uses to
+# vectorize loops such as the audio DSP and texture conversion. Every browser with WebGPU has SIMD.
+add_compile_options(-pthread -fwasm-exceptions -sSUPPORT_LONGJMP=wasm -msimd128)
+add_link_options(-pthread -fwasm-exceptions -sSUPPORT_LONGJMP=wasm -msimd128)
 
 # Code mods patch native code at runtime, which wasm cannot do.
 set(DUSK_ENABLE_CODE_MODS OFF CACHE BOOL "" FORCE)
@@ -93,6 +94,10 @@ function(dusk_configure_web_target target)
             -sINITIAL_MEMORY=${_initial_bytes}
             -sMAXIMUM_MEMORY=${_maximum_bytes}
             -sALLOW_MEMORY_GROWTH=1
+            # Not -sGROWABLE_ARRAYBUFFERS: it would spare the JS side a growth check on each memory
+            # access, but WebGPU rejects views of resizable buffers ("must not be resizable"), and
+            # the WebGPU bindings pass such views on most calls (setBindGroup, writeBuffer, ...).
+            -Wno-pthreads-mem-growth
             # Static data stays above 64 KiB: aurora treats texture pointers below 0x10000 as
             # placeholder IDs (lib/gfx/texture.hpp, has_data()).
             -sGLOBAL_BASE=65536

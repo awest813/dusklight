@@ -253,7 +253,8 @@ web audio output in headless Chromium.
 
 After building, `platforms/web/tests/run-page.mjs build/web` checks that the prelaunch screen renders
 in headless Chromium; with `--disc <image> --expect-log <regex>` it boots a disc image, such as the
-data-free one `platforms/web/tests/make-synthetic-disc.py` writes.
+data-free one `platforms/web/tests/make-synthetic-disc.py` writes. `platforms/web/tests/profile-page.mjs build/web`
+prints where the page's main thread spends its time.
 
 ## Running
 

@@ -17,9 +17,10 @@ const WII_MAGIC = 0x5d1c9ea3;
 const $ = (id) => document.getElementById(id);
 const log = [];
 
+// Keeps the last 5000 lines or so; trimming in batches keeps logging cheap.
 function remember(line) {
   log.push(line);
-  if (log.length > 5000) log.splice(0, log.length - 5000);
+  if (log.length > 6000) log.splice(0, log.length - 5000);
 }
 
 function formatSize(bytes) {
@@ -266,31 +267,44 @@ function loadScript(src) {
   });
 }
 
+// Downloads, compiles and initializes the module (including its thread pool) without starting the
+// game. It starts as soon as the browser is known to be supported, so most of that work is done
+// while the player is still choosing their disc.
+let runtime = null;
+function loadRuntime() {
+  runtime ??= (async () => {
+    const ready = new Promise((resolve) => {
+      window.Module = {
+        canvas: $('canvas'),
+        noInitialRun: true,
+        print: (text) => { remember(text); console.log(text); },
+        printErr: (text) => { remember(text); console.warn(text); },
+        onAbort: (what) => showFatal(String(what)),
+        onExit: (status) => { if (status !== 0) showFatal(`Exited with status ${status}`); },
+        onRuntimeInitialized: resolve,
+      };
+    });
+    await loadScript(config.script);
+    await ready;
+  })();
+  return runtime;
+}
+
 async function start(source) {
   $('setup').hidden = true;
+  $('loading').hidden = false;
   const canvas = $('canvas');
   canvas.hidden = false;
   canvas.focus();
 
-  const runtimeReady = new Promise((resolve) => {
-    window.Module = {
-      canvas,
-      noInitialRun: true,
-      print: (text) => { remember(text); console.log(text); },
-      printErr: (text) => { remember(text); console.warn(text); },
-      onAbort: (what) => showFatal(String(what)),
-      onExit: (status) => { if (status !== 0) showFatal(`Exited with status ${status}`); },
-      onRuntimeInitialized: resolve,
-    };
-  });
-  await loadScript(config.script);
-  await runtimeReady;
+  await loadRuntime();
   // The module's memory (platforms/web/shell/pre.js), shared with the disc worker.
   const memory = Module.duskMemory();
 
   const extraArgs = new URLSearchParams(location.search).getAll('arg');
   if (source === null) {
     // No disc (?nodisc): the game opens its prelaunch screen. Used by the smoke test.
+    $('loading').hidden = true;
     await Module.callMain(extraArgs);
     return;
   }
@@ -307,6 +321,7 @@ async function start(source) {
 
   const name = source.kind === 'opfs' ? source.name : source.file.name;
   const args = ['--dvd', `webdisc://${name}`, ...extraArgs];
+  $('loading').hidden = true;
   await Module.callMain(args);
 }
 
@@ -373,6 +388,7 @@ async function setup() {
     $('unsupported').hidden = false;
     return;
   }
+  loadRuntime().catch((e) => showFatal(`Couldn't load Dusklight: ${e.message}`));
 
   const stored = await storedDisc();
   if (stored) {

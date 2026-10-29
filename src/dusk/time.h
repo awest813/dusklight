@@ -1,6 +1,9 @@
 #pragma once
 
 #include <SDL3/SDL_timer.h>
+#ifdef __EMSCRIPTEN__
+#include "dusk/web/platform.hpp"
+#endif
 
 #include <array>
 #include <numeric>
@@ -133,6 +136,9 @@ private:
 #endif
       }
   }
+#elif defined(__EMSCRIPTEN__)
+  // SDL_Delay is setTimeout in a browser, which rounds short sleeps up to about 4 ms.
+  void NanoSleep(const duration_t duration) { dusk::web::precise_sleep(duration); }
 #else
   void NanoSleep(const duration_t duration) { SDL_DelayPrecise(duration); }
 #endif

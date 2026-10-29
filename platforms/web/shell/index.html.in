@@ -9,6 +9,7 @@
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" hidden></canvas>
+<div id="loading" hidden role="status">Loading…</div>
 
 <main id="setup">
   <h1><img src="logo.png" alt="Dusklight" width="2310" height="495"></h1>

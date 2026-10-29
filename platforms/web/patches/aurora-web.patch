@@ -222,7 +222,7 @@ index 94481a4..cb38a86 100644
  
    NodHandle* discHandle;
 diff --git a/lib/gfx/frame.cpp b/lib/gfx/frame.cpp
-index e005a60..fac7a8d 100644
+index e005a60..1792277 100644
 --- a/lib/gfx/frame.cpp
 +++ b/lib/gfx/frame.cpp
 @@ -5,6 +5,7 @@
@@ -233,14 +233,15 @@ index e005a60..fac7a8d 100644
  #include "tex_copy_conv.hpp"
  #include "tex_palette_conv.hpp"
  #include "texture_replacement.hpp"
-@@ -179,7 +180,13 @@ void wait_for_gpu_progress(std::chrono::nanoseconds sleepDuration) {
+@@ -179,7 +180,14 @@ void wait_for_gpu_progress(std::chrono::nanoseconds sleepDuration) {
    if (render_worker::is_idle()) {
      enqueue_process_events();
    }
 +#ifdef __EMSCRIPTEN__
-+  // The completions this waits for are delivered from the browser's event loop.
++  // The completions this waits for are delivered from the browser's event loop, after the GPU
++  // finishes the work they depend on.
 +  (void)sleepDuration;
-+  webgpu::web::yield_to_browser();
++  webgpu::web::wait_for_gpu_work(g_device);
 +#else
    std::this_thread::sleep_for(sleepDuration);
 +#endif
@@ -579,10 +580,10 @@ index b3ae6cd..7112bf6 100644
  
 diff --git a/lib/webgpu/web_extensions.cpp b/lib/webgpu/web_extensions.cpp
 new file mode 100644
-index 0000000..ac69ff4
+index 0000000..871593f
 --- /dev/null
 +++ b/lib/webgpu/web_extensions.cpp
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,128 @@
 +#include "web_extensions.hpp"
 +#include "gpu.hpp"
 +
@@ -625,6 +626,21 @@ index 0000000..ac69ff4
 +  });
 +});
 +
++EM_ASYNC_JS(void, aurora_web_wait_for_gpu_work, (WGPUDevice device), {
++  // Sleeps until the GPU finishes the work submitted so far (whose completion is what the caller
++  // waits on: a buffer map or a frame slot), at most 50 ms. Yielding in a tight loop instead keeps
++  // the main thread fully busy for as long as the GPU is behind.
++  const start = performance.now();
++  await Promise.race([
++    WebGPU.getJsObject(device).queue.onSubmittedWorkDone(),
++    new Promise((resolve) => setTimeout(resolve, 50)),
++  ]);
++  if (performance.now() - start < 0.5) {
++    // Nothing was in flight: give the callbacks already due a task to run in before returning.
++    await new Promise((resolve) => setTimeout(resolve, 0));
++  }
++});
++
 +EM_JS(int, aurora_web_preferred_canvas_format_is_bgra, (), {
 +  return navigator.gpu.getPreferredCanvasFormat() === 'bgra8unorm' ? 1 : 0;
 +});
@@ -650,6 +666,8 @@ index 0000000..ac69ff4
 +}
 +
 +void yield_to_browser() { aurora_web_yield_to_browser(); }
++
++void wait_for_gpu_work(const wgpu::Device& device) { aurora_web_wait_for_gpu_work(device.Get()); }
 +
 +void wait_for_animation_frame() { aurora_web_wait_for_animation_frame(); }
 +
@@ -696,10 +714,10 @@ index 0000000..ac69ff4
 +} // namespace aurora::webgpu
 diff --git a/lib/webgpu/web_extensions.hpp b/lib/webgpu/web_extensions.hpp
 new file mode 100644
-index 0000000..ab3f812
+index 0000000..3379afd
 --- /dev/null
 +++ b/lib/webgpu/web_extensions.hpp
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,44 @@
 +#pragma once
 +
 +// Browser WebGPU features that the emdawnwebgpu port bundled with Emscripten does not wrap yet.
@@ -728,6 +746,10 @@ index 0000000..ab3f812
 +// "block until the GPU makes progress", since WebGPU callbacks are only delivered from the event
 +// loop. Returns after roughly one task, not after any particular event; callers re-check.
 +void yield_to_browser();
++
++// Suspends the calling stack (JSPI) until the GPU has finished the work submitted to `device` so far
++// (or 50 ms pass), without keeping the thread busy: the web form of waiting for GPU progress.
++void wait_for_gpu_work(const wgpu::Device& device);
 +
 +// Suspends the calling stack (JSPI) until the next animation frame: how an iteration of the main
 +// loop that draws nothing (paused, or no surface) lets the browser run.

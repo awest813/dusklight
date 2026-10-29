@@ -38,6 +38,15 @@ export function createIsolatedServer(root, { isolated = true } = {}) {
       }
       if ((await stat(file)).isDirectory()) file = path.join(file, 'index.html');
       const info = await stat(file);
+      // Revalidated on every load, so a rebuild is picked up, but an unchanged file comes from the
+      // browser's cache, which also lets it reuse its compiled copy of the wasm module.
+      const etag = `"${info.size.toString(16)}-${Math.floor(info.mtimeMs).toString(16)}"`;
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('ETag', etag);
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304).end();
+        return;
+      }
       res.writeHead(200, {
         'Content-Type': types[path.extname(file)] ?? 'application/octet-stream',
         'Content-Length': info.size,
