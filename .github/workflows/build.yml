@@ -344,6 +344,9 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           cmake --build --preset web
 
+      - name: Smoke test in headless Chromium (no disc, prelaunch screen)
+        run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/run-page.mjs build/web
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:

@@ -283,6 +283,13 @@ async function start(source) {
   await loadScript(config.script);
   await runtimeReady;
 
+  const extraArgs = new URLSearchParams(location.search).getAll('arg');
+  if (source === null) {
+    // No disc (?nodisc): the game opens its prelaunch screen. Used by the smoke test.
+    await Module.callMain(extraArgs);
+    return;
+  }
+
   const worker = new Worker('disc-worker.js');
   // Release the disc image (and its OPFS lock) as soon as the page goes away.
   window.addEventListener('pagehide', () => worker.terminate());
@@ -294,7 +301,7 @@ async function start(source) {
   await attached;
 
   const name = source.kind === 'opfs' ? source.name : source.file.name;
-  const args = ['--dvd', `webdisc://${name}`, ...new URLSearchParams(location.search).getAll('arg')];
+  const args = ['--dvd', `webdisc://${name}`, ...extraArgs];
   await Module.callMain(args);
 }
 
@@ -398,9 +405,14 @@ async function setup() {
 
   $('disc').hidden = false;
   $('saves').hidden = false;
+
+  if (new URLSearchParams(location.search).has('nodisc')) {
+    await start(null);
+  }
 }
 
-// Exposed for the browser tests (platforms/web/tests).
+// Exposed for the browser tests (platforms/web/tests). `window.duskState` is polled by run-page.mjs.
+window.duskState = { log, get fatal() { return fatalShown ? $('fatal-message').textContent : null; } };
 window.duskShell = { checkImage, copyIntoBrowser, storedDisc, forgetStoredDisc, exportSaves, importSaves, crc32 };
 
 setup();

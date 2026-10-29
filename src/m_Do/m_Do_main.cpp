@@ -582,6 +582,7 @@ int game_main(int argc, char* argv[]) {
             ("mods", "Path to mods directory", cxxopts::value<std::string>())
             ("backend", "Graphics API backend to use (auto, d3d12, d3d11, metal, vulkan, null)", cxxopts::value<std::string>())
             ("cvar", "Override configuration variables without modifying config", cxxopts::value<std::vector<std::string>>())
+            ("allow-software-gpu", "Accept a software (CPU) graphics adapter, e.g. for headless testing", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("develop", "Enable the game's developer mode and OSReport for debugging", cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("load-save", "Skip the opening and load a save from slot 1-3", cxxopts::value<uint8_t>()->default_value("0"))
             ("stage", "Upon launching, load a stage, room, spawn point, and layer. When using --load-save, it uses the specified save on the loaded stage. Format (STAGE,ROOM,POINT,LAYER). Example: (STAGE) or (STAGE,0,0,-1)", cxxopts::value<std::string>());
@@ -721,6 +722,7 @@ int game_main(int argc, char* argv[]) {
         }
 
         config.desiredBackend = ResolveDesiredBackend(parsed_arg_options);
+        config.allowCpuAdapter = parsed_arg_options["allow-software-gpu"].as<bool>();
         config.logCallback = borealis::log::aurora_callback();
         config.logLevel = borealis::log::to_aurora_level(startupLogLevel);
         config.mem1Size = 256 * 1024 * 1024;

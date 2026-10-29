@@ -21,6 +21,9 @@
 #include <SDL3/SDL_misc.h>
 #include <aurora/lib/window.hpp>
 #include <borealis/file_select.hpp>
+#ifdef __EMSCRIPTEN__
+#include "dusk/web/platform.hpp"
+#endif
 #include <borealis/io.hpp>
 #include <borealis/log.hpp>
 #include <borealis/update.hpp>
@@ -791,6 +794,11 @@ void ensure_initialized() noexcept {
 }
 
 void open_iso_picker() noexcept {
+#ifdef __EMSCRIPTEN__
+    // On the web the page picks the disc image (platforms/web/shell), so go back to it.
+    dusk::web::reload();
+    return;
+#endif
     ensure_initialized();
     borealis::file_select::open_file(
         {
