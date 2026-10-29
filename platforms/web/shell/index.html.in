@@ -75,11 +75,9 @@
 </div>
 
 <script>
-  // Set by CMake (platforms/web/cmake/WebOptions.cmake); must match the module's link settings.
+  // Set by CMake (platforms/web/cmake/WebOptions.cmake).
   window.duskConfig = {
     script: '@DUSK_WEB_JS@',
-    initialMemoryPages: @DUSK_WEB_INITIAL_MEMORY_PAGES@,
-    maximumMemoryPages: @DUSK_WEB_MAXIMUM_MEMORY_PAGES@,
   };
 </script>
 <script src="shell.js"></script>

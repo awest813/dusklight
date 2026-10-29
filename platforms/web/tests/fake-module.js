@@ -1,10 +1,12 @@
 // Stands in for dusklight.js in shell-test.mjs. It honours the same contract as the Emscripten
-// module: it takes the page's memory (Module.wasmMemory), reports onRuntimeInitialized, exposes the
-// disc channel's address, and on callMain reads the disc from a worker the way game threads do in
-// src/dusk/web/disc.cpp (post a request, wait for the reply, hand the slot back).
+// module: it reports onRuntimeInitialized, exposes its memory (Module.duskMemory(), as
+// platforms/web/shell/pre.js does) and the disc channel's address, and on callMain reads the disc
+// from a worker the way game threads do in src/dusk/web/disc.cpp (post a request, wait for the
+// reply, hand the slot back).
 (() => {
   const Module = window.Module;
-  const memory = Module.wasmMemory;
+  const memory = new WebAssembly.Memory({ initial: 64, maximum: 256, shared: true });
+  Module.duskMemory = () => memory;
   const channel = 4096;
   const scratch = 65536;
   new Uint8Array(memory.buffer, channel, 296).fill(0);

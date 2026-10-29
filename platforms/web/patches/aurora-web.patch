@@ -516,6 +516,21 @@ index b24ec60..51eb075 100644
  
  #include "../gfx/clear.hpp"
  #include "RmlUi/Core/RenderInterface.h"
+diff --git a/lib/rmlui/pipeline.cpp b/lib/rmlui/pipeline.cpp
+index 82fcbcd..ed0b4fd 100644
+--- a/lib/rmlui/pipeline.cpp
++++ b/lib/rmlui/pipeline.cpp
+@@ -957,6 +957,10 @@ wgpu::RenderPipeline create_pipeline(const PipelineConfig& config) {
+     };
+     depthStencilState = {
+         .format = stencilFormat,
++        // Stencil-only: browsers reject depth writes (and depth tests) on a format with no depth
++        // aspect, and the default left depthWriteEnabled undefined, which the web reads as true.
++        .depthWriteEnabled = wgpu::OptionalBool::False,
++        .depthCompare = wgpu::CompareFunction::Always,
+         .stencilFront = face,
+         .stencilBack = face,
+         .stencilReadMask = 0xFF,
 diff --git a/lib/webgpu/gpu.cpp b/lib/webgpu/gpu.cpp
 index b3ae6cd..7112bf6 100644
 --- a/lib/webgpu/gpu.cpp

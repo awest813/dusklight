@@ -68,8 +68,7 @@ set(BOREALIS_ENABLE_SENTRY OFF CACHE BOOL "" FORCE)
 set(BOREALIS_HTTP_BACKEND none CACHE STRING "" FORCE)
 set(BOREALIS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
-# Wasm memory: the page creates it (so its disc worker can see it) with these sizes, in 64 KiB
-# pages. MEM1 alone is 256 MiB (m_Do_main.cpp).
+# Wasm memory, in 64 KiB pages. MEM1 alone is 256 MiB (m_Do_main.cpp).
 set(DUSK_WEB_INITIAL_MEMORY_PAGES 16384) # 1 GiB
 set(DUSK_WEB_MAXIMUM_MEMORY_PAGES 65536) # 4 GiB
 
@@ -109,7 +108,10 @@ function(dusk_configure_web_target target)
             # Function names in the module keep stacks and crash reports readable.
             --profiling-funcs
             "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/res@/res"
+            # Exposes the module's memory to the page (Module.duskMemory()).
+            "SHELL:--pre-js ${DUSK_WEB_DIR}/shell/pre.js"
     )
+    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${DUSK_WEB_DIR}/shell/pre.js")
 
     # The page and its helpers, next to dusklight.js/.wasm/.data.
     set(DUSK_WEB_JS "dusklight.js")

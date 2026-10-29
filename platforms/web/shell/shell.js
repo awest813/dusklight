@@ -36,13 +36,22 @@ function download(name, blob) {
 // --- Fatal errors -----------------------------------------------------------------------------
 
 let fatalShown = false;
+const fatalReasons = [];
 
+// Several reports usually arrive for one failure (the game's own fatal log line, Emscripten's
+// abort, the resulting trap), and the abort reason itself is often empty, so collect them all and
+// show the end of the log with them.
 function showFatal(message) {
-  remember(`fatal: ${message}`);
-  console.error(message);
-  if (fatalShown) return;
+  message = String(message ?? '').trim();
+  if (message) {
+    remember(`fatal: ${message}`);
+    console.error(message);
+    fatalReasons.push(message);
+  }
+  const tail = log.filter((line) => !line.startsWith('fatal: ')).slice(-15).join('\n');
+  $('fatal-message').textContent = [...fatalReasons, tail ? `Last log lines:\n${tail}` : '']
+    .filter(Boolean).join('\n\n') || 'The game stopped unexpectedly.';
   fatalShown = true;
-  $('fatal-message').textContent = message;
   $('fatal').hidden = false;
 }
 
@@ -261,17 +270,9 @@ async function start(source) {
   canvas.hidden = false;
   canvas.focus();
 
-  // The page owns the memory so the disc worker can see it (and its growth).
-  const memory = new WebAssembly.Memory({
-    initial: config.initialMemoryPages,
-    maximum: config.maximumMemoryPages,
-    shared: true,
-  });
-
   const runtimeReady = new Promise((resolve) => {
     window.Module = {
       canvas,
-      wasmMemory: memory,
       noInitialRun: true,
       print: (text) => { remember(text); console.log(text); },
       printErr: (text) => { remember(text); console.warn(text); },
@@ -282,6 +283,8 @@ async function start(source) {
   });
   await loadScript(config.script);
   await runtimeReady;
+  // The module's memory (platforms/web/shell/pre.js), shared with the disc worker.
+  const memory = Module.duskMemory();
 
   const extraArgs = new URLSearchParams(location.search).getAll('arg');
   if (source === null) {

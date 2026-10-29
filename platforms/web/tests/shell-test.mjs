@@ -44,9 +44,7 @@ async function makeSite() {
   await cp(shellDir, dir, { recursive: true });
   const template = await readFile(path.join(shellDir, 'index.html.in'), 'utf8');
   await writeFile(path.join(dir, 'index.html'), template
-    .replace('@DUSK_WEB_JS@', 'fake-module.js')
-    .replace('@DUSK_WEB_INITIAL_MEMORY_PAGES@', '64')
-    .replace('@DUSK_WEB_MAXIMUM_MEMORY_PAGES@', '256'));
+    .replace('@DUSK_WEB_JS@', 'fake-module.js'));
   await cp(path.join(here, 'fake-module.js'), path.join(dir, 'fake-module.js'));
   return dir;
 }
