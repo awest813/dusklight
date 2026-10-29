@@ -172,13 +172,13 @@ void dusk::audio::SetPaused(const bool paused) {
         WebMixer->set_paused(paused);
         dusk::web::audio::set_output_paused(paused);
     }
-    return;
-#endif
+#else
     if (paused) {
         SDL_PauseAudioStreamDevice(PlaybackStream);
     } else {
         SDL_ResumeAudioStreamDevice(PlaybackStream);
     }
+#endif
 }
 
 void dusk::audio::SetEnableReverb(const bool value) {

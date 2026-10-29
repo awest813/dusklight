@@ -797,8 +797,7 @@ void open_iso_picker() noexcept {
 #ifdef __EMSCRIPTEN__
     // On the web the page picks the disc image (platforms/web/shell), so go back to it.
     dusk::web::reload();
-    return;
-#endif
+#else
     ensure_initialized();
     borealis::file_select::open_file(
         {
@@ -806,6 +805,7 @@ void open_iso_picker() noexcept {
             .filters = kDiscFileFilters,
         },
         &file_dialog_callback);
+#endif
 }
 
 bool is_restart_pending() noexcept {
