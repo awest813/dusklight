@@ -34,6 +34,11 @@ if (DUSK_WEB_DEPS_DIR)
     endforeach ()
 endif ()
 
+# Everything (including dusk_nod_iso below) is built with wasm threads (game threads are pthreads), native wasm exceptions and
+# wasm setjmp/longjmp (libpng).
+add_compile_options(-pthread -fwasm-exceptions -sSUPPORT_LONGJMP=wasm)
+add_link_options(-pthread -fwasm-exceptions -sSUPPORT_LONGJMP=wasm)
+
 # Code mods patch native code at runtime, which wasm cannot do.
 set(DUSK_ENABLE_CODE_MODS OFF CACHE BOOL "" FORCE)
 set(DUSK_ENABLE_OPUS OFF CACHE BOOL "" FORCE)
@@ -62,11 +67,6 @@ set(BOREALIS_ENABLE_DISCORD OFF CACHE BOOL "" FORCE)
 set(BOREALIS_ENABLE_SENTRY OFF CACHE BOOL "" FORCE)
 set(BOREALIS_HTTP_BACKEND none CACHE STRING "" FORCE)
 set(BOREALIS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-
-# Everything is built with wasm threads (game threads are pthreads), native wasm exceptions and
-# wasm setjmp/longjmp (libpng).
-add_compile_options(-pthread -fwasm-exceptions -sSUPPORT_LONGJMP=wasm)
-add_link_options(-pthread -fwasm-exceptions -sSUPPORT_LONGJMP=wasm)
 
 # Wasm memory: the page creates it (so its disc worker can see it) with these sizes, in 64 KiB
 # pages. MEM1 alone is 256 MiB (m_Do_main.cpp).
