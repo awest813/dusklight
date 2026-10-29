@@ -44,7 +44,8 @@ async function makeSite() {
   await cp(shellDir, dir, { recursive: true });
   const template = await readFile(path.join(shellDir, 'index.html.in'), 'utf8');
   await writeFile(path.join(dir, 'index.html'), template
-    .replace('@DUSK_WEB_JS@', 'fake-module.js'));
+    .replace('@DUSK_WEB_JS@', 'fake-module.js')
+    .replace('@DUSK_WEB_VERSION@', 'test'));
   await cp(path.join(here, 'fake-module.js'), path.join(dir, 'fake-module.js'));
   return dir;
 }
@@ -70,15 +71,44 @@ try {
   page.on('pageerror', (e) => check(false, `page error: ${e.message}`));
   page.on('dialog', (d) => d.accept());
 
-  // Without cross-origin isolation the page explains instead of offering to start.
-  await page.goto(plain.base);
-  await page.waitForSelector('#unsupported:not([hidden])');
-  check((await page.textContent('#unsupported-list')).includes('Cross-origin isolation'),
-    'unisolated page lists the missing requirement');
+  // A browser without WebGPU gets an explanation instead of the disc picker.
+  {
+    const noGpu = await context.newPage();
+    await noGpu.addInitScript(() => { delete Navigator.prototype.gpu; });
+    await noGpu.goto(isolated.base);
+    await noGpu.waitForSelector('#unsupported:not([hidden])');
+    check((await noGpu.textContent('#unsupported-list')).includes('WebGPU'), 'unsupported browser is told what is missing');
+    await noGpu.close();
+  }
+
+  // A host that doesn't send the isolation headers: coi-sw.js adds them after one reload.
+  {
+    const plainContext = await browser.newContext();
+    const viaWorker = await plainContext.newPage();
+    await viaWorker.goto(plain.base);
+    await viaWorker.waitForSelector('#disc:not([hidden])', { timeout: 30_000 });
+    check(await viaWorker.evaluate(() => crossOriginIsolated), 'the service worker isolates a page served without headers');
+    await plainContext.close();
+  }
 
   await page.goto(isolated.base);
   await page.waitForSelector('#disc:not([hidden])');
   check(true, 'isolated page offers the disc picker');
+
+  // A second tab is told the game is already open; once the first is gone, it can start.
+  {
+    const second = await context.newPage();
+    await second.goto(isolated.base);
+    await second.waitForSelector('#elsewhere:not([hidden])', { timeout: 10_000 });
+    check(await second.isHidden('#disc'), 'a second tab does not offer to start');
+    await page.goto('about:blank');
+    await second.reload();
+    await second.waitForSelector('#disc:not([hidden])', { timeout: 10_000 });
+    check(true, 'the second tab can start once the first is closed');
+    await second.close();
+    await page.goto(isolated.base);
+    await page.waitForSelector('#disc:not([hidden])');
+  }
 
   // Image checks.
   const verdict = (bytes) => page.evaluate(async (b) =>

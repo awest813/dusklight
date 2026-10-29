@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dusklight</title>
+<meta name="description" content="Dusklight, a reimplementation of Twilight Princess, in your browser. Bring your own copy of the game.">
+<meta name="theme-color" content="#0e0f13">
 <link rel="stylesheet" href="shell.css">
 <link rel="icon" href="icon.png">
 </head>
@@ -12,7 +14,7 @@
 <div id="loading" hidden role="status">Loading…</div>
 
 <main id="setup">
-  <h1><img src="logo.png" alt="Dusklight" width="2310" height="495"></h1>
+  <h1><img src="logo.png" alt="Dusklight" width="900" height="193"></h1>
   <p class="lede">A reimplementation of Twilight Princess, running in your browser. You need your own
     copy of the game: Dusklight does not include any game data, and your disc image never leaves
     this device.</p>
@@ -21,6 +23,12 @@
     <h2>This browser can't run Dusklight</h2>
     <ul id="unsupported-list"></ul>
     <p>Use a recent version of Chrome or Edge on a desktop computer.</p>
+  </section>
+
+  <section id="elsewhere" hidden>
+    <h2>Dusklight is already open</h2>
+    <p>It's running in another tab or window. Close it, then reload this page.</p>
+    <div class="actions"><button class="primary" onclick="location.reload()">Reload</button></div>
   </section>
 
   <section id="disc" hidden>
@@ -62,9 +70,14 @@
     <p>They're kept in this browser. Clearing this site's data deletes them, so back them up.</p>
     <div class="actions">
       <button id="export-saves">Back up</button>
-      <label class="button">Restore a backup<input id="import-saves" type="file" accept=".zip" hidden></label>
+      <label class="button">Restore a backup<input id="import-saves" type="file" accept=".zip"></label>
     </div>
   </section>
+  <footer>
+    Dusklight @DUSK_WEB_VERSION@ ·
+    <a href="https://twilitrealm.dev/" target="_blank" rel="noopener">twilitrealm.dev</a> ·
+    Not affiliated with or endorsed by Nintendo.
+  </footer>
 </main>
 
 <div id="fatal" hidden role="alertdialog" aria-labelledby="fatal-title">

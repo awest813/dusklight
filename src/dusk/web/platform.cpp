@@ -21,7 +21,8 @@ void initialize() {
     disc::initialize();
 }
 
-void reload() { emscripten_run_script("location.reload()"); }
+// Through the page when it is there, so it doesn't ask whether to leave (platforms/web/shell).
+void reload() { emscripten_run_script("window.duskLeave ? duskLeave() : location.reload()"); }
 
 EM_ASYNC_JS(void, dusk_web_precise_sleep, (double milliseconds), {
   // Atomics.waitAsync's timeout isn't subject to setTimeout's clamping.

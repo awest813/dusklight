@@ -763,10 +763,20 @@ index 0000000..3379afd
 +} // namespace aurora::webgpu::web
 +#endif
 diff --git a/lib/window.cpp b/lib/window.cpp
-index 2a4aadf..89763f3 100644
+index 2a4aadf..23b4609 100644
 --- a/lib/window.cpp
 +++ b/lib/window.cpp
-@@ -290,6 +290,8 @@ const AuroraEvent* poll_events() {
+@@ -12,6 +12,9 @@
+ #include <SDL3/SDL_error.h>
+ #include <SDL3/SDL_events.h>
+ #include <SDL3/SDL_properties.h>
++#ifdef __EMSCRIPTEN__
++#include <emscripten/html5.h>
++#endif
+ #include <SDL3/SDL_render.h>
+ #include <SDL3/SDL_surface.h>
+ #include <SDL3/SDL_video.h>
+@@ -290,6 +293,8 @@ const AuroraEvent* poll_events() {
    SDL_Event event;
    // Clear out the previous scroll values to prevent ghost input
    input::set_mouse_scroll(0, 0);
@@ -775,7 +785,7 @@ index 2a4aadf..89763f3 100644
    if (is_paused()) {
      ZoneScopedN("SDL_WaitEvent (paused)");
      if (SDL_WaitEvent(&event)) {
-@@ -298,6 +300,7 @@ const AuroraEvent* poll_events() {
+@@ -298,6 +303,7 @@ const AuroraEvent* poll_events() {
        Log.warn("SDL_WaitEvent failed: {}", SDL_GetError());
      }
    }
@@ -783,3 +793,31 @@ index 2a4aadf..89763f3 100644
    while (true) {
      bool hasEvent = false;
      {
+@@ -338,6 +344,16 @@ bool create_window(AuroraBackend backend) {
+   if (height < 480) {
+     height = 480;
+   }
++#ifdef __EMSCRIPTEN__
++  // The page sizes the canvas (CSS); start at that size rather than the configured one, which would
++  // be stretched to fit until the first browser resize.
++  if (double cssWidth = 0, cssHeight = 0;
++      emscripten_get_element_css_size("#canvas", &cssWidth, &cssHeight) == EMSCRIPTEN_RESULT_SUCCESS &&
++      cssWidth >= 1 && cssHeight >= 1) {
++    width = static_cast<Sint32>(cssWidth);
++    height = static_cast<Sint32>(cssHeight);
++  }
++#endif
+ 
+   Sint32 posX = g_config.windowPosX;
+   Sint32 posY = g_config.windowPosY;
+@@ -366,7 +382,10 @@ bool create_window(AuroraBackend backend) {
+     Log.error("Failed to create window: {}", SDL_GetError());
+     return false;
+   }
++#ifndef __EMSCRIPTEN__
++  // On the web the page decides the size, down to phone screens.
+   SDL_SetWindowMinimumSize(g_window, 640, 480);
++#endif
+   set_window_icon();
+   return true;
+ }

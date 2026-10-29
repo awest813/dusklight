@@ -662,6 +662,24 @@ GPUs. Main-thread CPU use and startup are representative.
   - pipeline compilation hitches;
   - the audio mixer's cost.
 
+### Ready for players
+
+[web.md](web.md) is the player and host guide. For a first public build:
+
+- **Any static host works.** Where the host can't send COOP/COEP (GitHub Pages), `coi-sw.js`, a
+  service worker, adds them and the page reloads once. A session flag stops a reload loop if
+  isolation still fails, and the page then says so.
+- **One tab at a time.** A second tab would fight over the stored disc and OPFS files; it now says
+  Dusklight is open elsewhere (Web Locks).
+- **Quitting from the game's menu returns to the page** instead of leaving a dead canvas. Closing
+  the tab while playing asks first.
+- **The canvas starts at its page size,** not the configured window size (aurora patch), and the
+  native 640×480 minimum window size is not applied.
+- **No update check** in the browser: the page is always the deployed version.
+- The page asks for persistent storage so the browser doesn't evict saves and the stored disc, and
+  shows the build version and a not-affiliated notice. Page edits reach the build folder on every
+  build, not only when the module relinks.
+
 ### Found along the way
 
 - After a reload, the previous page's disc worker can still hold the OPFS access handle. The new

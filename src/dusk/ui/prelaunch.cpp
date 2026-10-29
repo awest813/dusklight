@@ -199,6 +199,10 @@ std::optional<DiscVerificationResult> take_finished_disc_verification() {
 }
 
 void begin_update_check() {
+#ifdef __EMSCRIPTEN__
+    // The page is the update channel on the web: it always serves the current build.
+    return;
+#endif
     if (!getSettings().backend.checkForUpdates.getValue()) {
         return;
     }

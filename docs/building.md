@@ -213,7 +213,8 @@ Alternate presets available:
 
 **ninja (Web, experimental)**
 
-The browser build is a work in progress; see [the web port plan](web-port-plan.md). It needs
+The browser build is a work in progress; see [the web port plan](web-port-plan.md), and
+[Playing Dusklight in a browser](web.md) for players and for hosting it. It needs
 [Emscripten](https://emscripten.org/docs/getting_started/downloads.html) 6.0.13 activated in your
 shell:
 

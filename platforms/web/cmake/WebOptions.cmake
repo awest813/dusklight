@@ -120,20 +120,30 @@ function(dusk_configure_web_target target)
 
     # The page and its helpers, next to dusklight.js/.wasm/.data.
     set(DUSK_WEB_JS "dusklight.js")
+    # A checkout without tags (a shallow clone) has no describable version; name the commit instead.
+    set(DUSK_WEB_VERSION "${BOREALIS_APP_DESCRIBE}")
+    if (NOT DUSK_WEB_VERSION OR DUSK_WEB_VERSION STREQUAL "UNKNOWN-VERSION")
+        string(SUBSTRING "${BOREALIS_APP_REVISION}" 0 9 DUSK_WEB_VERSION)
+    endif ()
     configure_file("${DUSK_WEB_DIR}/shell/index.html.in" "${CMAKE_CURRENT_BINARY_DIR}/web/index.html" @ONLY)
-    add_custom_command(TARGET ${target} POST_BUILD
+    # A separate target that runs on every build, so page changes are copied even when the module
+    # does not relink.
+    add_custom_target(${target}_web_page ALL
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_CURRENT_BINARY_DIR}/web/index.html"
                 "${DUSK_WEB_DIR}/shell/shell.js"
                 "${DUSK_WEB_DIR}/shell/shell.css"
                 "${DUSK_WEB_DIR}/shell/disc-worker.js"
                 "${DUSK_WEB_DIR}/shell/audio-worklet.js"
-                "${CMAKE_SOURCE_DIR}/res/logo.png"
-                "${CMAKE_SOURCE_DIR}/res/icon.png"
+                "${DUSK_WEB_DIR}/shell/coi-sw.js"
+                # Page-sized copies of res/logo.png and res/icon.png.
+                "${DUSK_WEB_DIR}/shell/logo.png"
+                "${DUSK_WEB_DIR}/shell/icon.png"
                 "${DUSK_WEB_DIR}/shell/_headers"
                 "${DUSK_WEB_DIR}/shell/serve.mjs"
                 "$<TARGET_FILE_DIR:${target}>"
             COMMENT "Copying the web page"
             VERBATIM
     )
+    add_dependencies(${target} ${target}_web_page)
 endfunction()

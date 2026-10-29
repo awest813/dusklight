@@ -36,6 +36,24 @@ function download(name, blob) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+// --- Leaving ----------------------------------------------------------------------------------
+
+// While the game runs, closing or reloading the tab asks first, since anything not saved in the
+// game is lost. Leaving on purpose (the game's own restart or quit, or Reload after an error)
+// doesn't.
+let leaving = false;
+let playing = false;
+window.addEventListener('beforeunload', (e) => {
+  if (playing && !leaving) e.preventDefault();
+});
+
+function leave() {
+  leaving = true;
+  location.reload();
+}
+// The game calls this to restart or to go back to the disc picker (src/dusk/web/platform.cpp).
+window.duskLeave = leave;
+
 // --- Fatal errors -----------------------------------------------------------------------------
 
 let fatalShown = false;
@@ -55,11 +73,12 @@ function showFatal(message) {
   $('fatal-message').textContent = [...fatalReasons, tail ? `Last log lines:\n${tail}` : '']
     .filter(Boolean).join('\n\n') || 'The game stopped unexpectedly.';
   fatalShown = true;
+  playing = false;
   $('fatal').hidden = false;
 }
 
 $('fatal-log').onclick = () => download('dusklight-log.txt', new Blob([log.join('\n')], { type: 'text/plain' }));
-$('fatal-reload').onclick = () => location.reload();
+$('fatal-reload').onclick = leave;
 window.addEventListener('error', (e) => showFatal(e.error?.stack ?? e.message));
 window.addEventListener('unhandledrejection', (e) => showFatal(e.reason?.stack ?? String(e.reason)));
 
@@ -280,7 +299,9 @@ function loadRuntime() {
         print: (text) => { remember(text); console.log(text); },
         printErr: (text) => { remember(text); console.warn(text); },
         onAbort: (what) => showFatal(String(what)),
-        onExit: (status) => { if (status !== 0) showFatal(`Exited with status ${status}`); },
+        // Quitting from the game's menu comes back to this page. (An exit proxied from another
+        // thread can arrive without its status.)
+        onExit: (status) => (!status ? leave() : showFatal(`Exited with status ${status}`)),
         onRuntimeInitialized: resolve,
       };
     });
@@ -295,7 +316,12 @@ async function start(source) {
   $('loading').hidden = false;
   const canvas = $('canvas');
   canvas.hidden = false;
+  canvas.oncontextmenu = (e) => e.preventDefault(); // the game may use the right mouse button
   canvas.focus();
+
+  // Saves and settings live in this origin's storage; ask the browser not to evict it.
+  navigator.storage.persist?.().catch(() => {});
+  playing = true;
 
   await loadRuntime();
   // The module's memory (platforms/web/shell/pre.js), shared with the disc worker.
@@ -381,11 +407,47 @@ async function playPicked() {
   await start({ kind: 'opfs', dir: [DISC_DIR], name: pickedFile.name });
 }
 
+// Registers coi-sw.js and reloads once, on hosts that don't send the isolation headers. Returns
+// true when a reload is on its way.
+async function isolateThroughServiceWorker() {
+  if (globalThis.crossOriginIsolated || !window.isSecureContext || !('serviceWorker' in navigator)) return false;
+  if (sessionStorage.getItem('dusklight.isolationReload')) return false; // already tried
+  try {
+    await navigator.serviceWorker.register('coi-sw.js');
+    await navigator.serviceWorker.ready;
+  } catch {
+    return false;
+  }
+  sessionStorage.setItem('dusklight.isolationReload', '1');
+  location.reload();
+  return true;
+}
+
+// Holds a lock for as long as this page lives, so only one tab plays at a time: two would fight
+// over the stored disc image and the saves. Waits briefly, since after a reload the previous page
+// may not have released it yet. Resolves to whether this page got it.
+function claimSingleInstance() {
+  if (!navigator.locks) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    navigator.locks.request('dusklight', { signal: AbortSignal.timeout(3000) }, () => {
+      resolve(true);
+      return new Promise(() => {});
+    }).catch(() => resolve(false));
+  });
+}
+
 async function setup() {
+  if (await isolateThroughServiceWorker()) return;
+  sessionStorage.removeItem('dusklight.isolationReload');
+
   const missing = missingFeatures();
   if (missing.length) {
     $('unsupported-list').replaceChildren(...missing.map((m) => Object.assign(document.createElement('li'), { textContent: m })));
     $('unsupported').hidden = false;
+    return;
+  }
+  if (!(await claimSingleInstance())) {
+    $('elsewhere').hidden = false;
     return;
   }
   loadRuntime().catch((e) => showFatal(`Couldn't load Dusklight: ${e.message}`));
