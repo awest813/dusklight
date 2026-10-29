@@ -409,6 +409,12 @@ void OSSleepThread(OSThreadQueue* queue) {
     OSThread* currentThread = OSGetCurrentThread();
     if (!currentThread) return;
 
+    // The queue links and thread state are shared with OSWakeupThread, so change them under the
+    // same mutex the wait uses. Otherwise a wakeup landing between the predicate check and the
+    // wait is lost.
+    std::condition_variable& cv = GetQueueCV(queue);
+    std::unique_lock<std::mutex> lock(GetQueueCvMutex());
+
     currentThread->state = OS_THREAD_STATE_WAITING;
     currentThread->queue = queue;
 
@@ -424,8 +430,6 @@ void OSSleepThread(OSThreadQueue* queue) {
     queue->tail = currentThread;
 
     // Wait on the condition variable for this queue
-    std::condition_variable& cv = GetQueueCV(queue);
-    std::unique_lock<std::mutex> lock(GetQueueCvMutex());
     cv.wait(lock, [currentThread]() {
         return currentThread->state != OS_THREAD_STATE_WAITING;
     });
@@ -434,20 +438,24 @@ void OSSleepThread(OSThreadQueue* queue) {
 void OSWakeupThread(OSThreadQueue* queue) {
     if (!queue) return;
 
-    // Wake all threads in the queue
-    OSThread* thread = queue->head;
-    while (thread) {
-        OSThread* next = thread->link.next;
-        thread->state = OS_THREAD_STATE_READY;
-        thread->link.next = nullptr;
-        thread->link.prev = nullptr;
-        thread->queue = nullptr;
-        thread = next;
+    std::condition_variable& cv = GetQueueCV(queue);
+    {
+        std::lock_guard<std::mutex> lock(GetQueueCvMutex());
+
+        // Wake all threads in the queue
+        OSThread* thread = queue->head;
+        while (thread) {
+            OSThread* next = thread->link.next;
+            thread->state = OS_THREAD_STATE_READY;
+            thread->link.next = nullptr;
+            thread->link.prev = nullptr;
+            thread->queue = nullptr;
+            thread = next;
+        }
+        queue->head = queue->tail = nullptr;
     }
-    queue->head = queue->tail = nullptr;
 
     // Notify all waiters
-    std::condition_variable& cv = GetQueueCV(queue);
     cv.notify_all();
 }
 

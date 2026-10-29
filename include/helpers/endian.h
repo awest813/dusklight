@@ -6,7 +6,8 @@
 #include "dolphin/mtx.h"
 
 // Platform detection - Little Endian targets
-#if defined(_WIN32) || defined(__x86_64__) || defined(__i386__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_IX86)
+#if defined(_WIN32) || defined(__x86_64__) || defined(__i386__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_IX86) || \
+    defined(__wasm__) || (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
     #define TARGET_LITTLE_ENDIAN 1
 #else
     #define TARGET_LITTLE_ENDIAN 0

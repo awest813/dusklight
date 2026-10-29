@@ -1,7 +1,7 @@
 # Web port: audit and plan
 
-Status: plan accepted; nothing is implemented yet. Decisions are recorded under
-[Decisions](#decisions), and the questions still open are listed after them.
+Status: plan accepted, implementation started. Decisions are recorded under
+[Decisions](#decisions); progress under [Progress](#progress).
 
 This document audits what stands between the current native build and one that runs in a browser
 (WebAssembly + WebGPU), and lays out a phased plan. File references are to this repo, to
@@ -290,8 +290,10 @@ mostly behind `WEBGPU_DAWN`, and this version has no MetalFX, no shared texture 
     Firefox or Safari later needs a uniform-buffer path.
 
 **Plan:**
-- Land these changes in aurora behind `__EMSCRIPTEN__`/`WEBGPU_DAWN`, following MKWiii's apply
-  script until they are upstreamed to `encounter/aurora`.
+- Carry these changes as a patch, the way MKWiii does: `platforms/web/aurora/aurora-web.patch`,
+  applied idempotently to `extern/aurora` by `platforms/web/apply-patches.sh`. Every hunk is
+  web-only (`__EMSCRIPTEN__`/`WEBGPU_DAWN`), so applying it to a native checkout is harmless.
+  borealis changes are carried the same way.
 - Build MKWiii's `runtime/web/smoke` app against our aurora as the first CI gate.
 
 **Pipeline compilation stutter.** On WebGPU, aurora builds pipelines synchronously on first use
@@ -329,8 +331,8 @@ This is the most likely source of "feels worse than native".
   "convert to ISO first" message for compressed formats. Note that aurora's DVD overlay hooks
   (`include/aurora/dvd.h`) already show the FST can be served without nod.
 - **Getting bytes to nod.** The `read_at` callback is the seam. It must run on a worker and be
-  synchronous, so the main thread can safely spin on DVD completion (section 3). In order of
-  preference:
+  synchronous, so the main thread can safely spin on DVD completion (section 3). The user picks
+  the storage mode on the disc screen:
   1. **OPFS.** Copy the image once into the origin-private file system and read it with a
      `FileSystemSyncAccessHandle` from the aurora DVD worker. This is fast, persists, and works in
      every browser with OPFS. It costs a one-time copy of 1.4 GB (GC) or 4.7 GB (Wii) against the
@@ -511,8 +513,11 @@ with COOP/COEP, plus an offscreen canvas shim. Phases that need a disc are verif
 - **Disc formats:** if nod cannot be built for wasm, the first release accepts plain ISO/GCM only,
   and tells users to convert compressed images first.
 
-## Still open
+- **Disc storage:** the user chooses on the disc screen, either "copy into browser storage"
+  (OPFS, persists, costs quota) or "use this file for this session" (re-pick each visit).
+- **aurora and borealis changes:** carried as patches under `platforms/web/`, as MKWiii does, not
+  upstreamed.
 
-- **Disc storage:** copy the disc into OPFS (persistent, costs quota) or re-pick it each session.
-- **aurora changes:** upstream to `encounter/aurora` behind `__EMSCRIPTEN__` (recommended, as
-  MKWiii decided for its fork), or carry a patch.
+## Progress
+
+Nothing below has been compiled with Emscripten yet; see each item.

@@ -28,6 +28,26 @@
 namespace dusk::mods {
 namespace {
 
+// The adapter a device came from. Dawn exposes it; the browser's WebGPU (emdawnwebgpu) does not,
+// so on the web the services that need it report themselves unavailable.
+wgpu::Adapter device_adapter(const wgpu::Device& device) {
+#ifdef __EMSCRIPTEN__
+    (void)device;
+    return {};
+#else
+    return device.GetAdapter();
+#endif
+}
+
+wgpu::Instance adapter_instance(const wgpu::Adapter& adapter) {
+#ifdef __EMSCRIPTEN__
+    (void)adapter;
+    return {};
+#else
+    return adapter ? adapter.GetInstance() : wgpu::Instance{};
+#endif
+}
+
 // Oops! We forgot the FIFO thread exists. The design of this service isn't thread safe.
 // Encounter said he'd fix it, this is the temporary workaround.
 #define OH_FUCK_SYNC AuroraGXSync();
@@ -343,7 +363,7 @@ bool configure_present_target(const std::shared_ptr<PresentTargetState>& state,
         return false;
     }
 
-    const auto adapter = ctx.device.GetAdapter();
+    const auto adapter = device_adapter(ctx.device);
     wgpu::SurfaceCapabilities capabilities;
     if (!adapter ||
         state->surface.GetCapabilities(adapter, &capabilities) != wgpu::Status::Success ||
@@ -1088,8 +1108,8 @@ ModResult gfx_get_device_info(ModContext* context, GfxDeviceInfo* outInfo) {
     outInfo->sample_count = aurora::gfx::sample_count();
     outInfo->uses_reversed_z = aurora::gfx::uses_reversed_z();
     if (structSize >= sizeof(GfxDeviceInfo)) {
-        const auto adapter = device.GetAdapter();
-        const auto instance = adapter ? adapter.GetInstance() : wgpu::Instance{};
+        const auto adapter = device_adapter(device);
+        const auto instance = adapter_instance(adapter);
         outInfo->instance = instance.Get();
         outInfo->adapter = adapter.Get();
     }
@@ -1165,8 +1185,8 @@ ModResult gfx_register_window_present_target_impl(ModContext* context, WindowHan
     }
 
     const auto device = aurora::gfx::device();
-    const auto adapter = device.GetAdapter();
-    const auto instance = adapter ? adapter.GetInstance() : wgpu::Instance{};
+    const auto adapter = device_adapter(device);
+    const auto instance = adapter_instance(adapter);
     auto surface = aurora::webgpu::create_window_surface(instance, sdlWindow, desc->label);
     if (!surface) {
         window_release_for_graphics(*mod, window);

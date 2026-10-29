@@ -1,0 +1,5 @@
+# Cross-origin isolation, which wasm threads (SharedArrayBuffer) require. This file is read by
+# Cloudflare Pages and Netlify; other hosts must send the same two headers on every response.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp

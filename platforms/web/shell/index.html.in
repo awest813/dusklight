@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dusklight</title>
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" hidden></canvas>
+
+<main id="setup">
+  <h1>Dusklight</h1>
+  <p class="lede">A reimplementation of Twilight Princess, running in your browser. You need your own
+    copy of the game: Dusklight does not include any game data, and your disc image never leaves
+    this device.</p>
+
+  <section id="unsupported" hidden>
+    <h2>This browser can't run Dusklight</h2>
+    <ul id="unsupported-list"></ul>
+    <p>Use a recent version of Chrome or Edge on a desktop computer.</p>
+  </section>
+
+  <section id="disc" hidden>
+    <div id="stored" hidden>
+      <h2>Your disc</h2>
+      <p><strong id="stored-name"></strong> is stored in this browser.</p>
+      <div class="actions">
+        <button id="play-stored" class="primary">Play</button>
+        <button id="forget-stored">Remove it</button>
+      </div>
+      <h2>Or use another disc</h2>
+    </div>
+
+    <label id="drop" class="drop">
+      <input id="file" type="file" accept=".iso,.gcm">
+      <span>Choose your disc image, or drop it here</span>
+      <small>An uncompressed GameCube image (.iso or .gcm). Convert RVZ, WIA, CISO and other formats
+        with Dolphin or nodtool first.</small>
+    </label>
+
+    <div id="picked" hidden>
+      <p><strong id="picked-name"></strong> <span id="picked-size"></span></p>
+      <fieldset>
+        <legend>Where should Dusklight read it from?</legend>
+        <label><input type="radio" name="storage" value="copy" checked>
+          Keep a copy in this browser, so you don't have to choose it again
+          <small id="copy-note"></small></label>
+        <label><input type="radio" name="storage" value="session">
+          Use this file for now; you'll choose it again next time</label>
+      </fieldset>
+      <div class="actions"><button id="play-picked" class="primary">Play</button></div>
+    </div>
+    <p id="disc-error" class="error" role="alert" hidden></p>
+    <div id="progress" hidden><progress max="1" value="0"></progress> <span></span></div>
+  </section>
+
+  <section id="saves" hidden>
+    <h2>Saves and settings</h2>
+    <p>They're kept in this browser. Clearing this site's data deletes them, so back them up.</p>
+    <div class="actions">
+      <button id="export-saves">Back up</button>
+      <label class="button">Restore a backup<input id="import-saves" type="file" accept=".zip" hidden></label>
+    </div>
+  </section>
+</main>
+
+<div id="fatal" hidden role="alertdialog" aria-labelledby="fatal-title">
+  <h2 id="fatal-title">Dusklight stopped</h2>
+  <pre id="fatal-message"></pre>
+  <div class="actions">
+    <button id="fatal-log">Download log</button>
+    <button id="fatal-reload" class="primary">Reload</button>
+  </div>
+</div>
+
+<script>
+  // Set by CMake (platforms/web/cmake/WebOptions.cmake); must match the module's link settings.
+  window.duskConfig = {
+    script: '@DUSK_WEB_JS@',
+    initialMemoryPages: @DUSK_WEB_INITIAL_MEMORY_PAGES@,
+    maximumMemoryPages: @DUSK_WEB_MAXIMUM_MEMORY_PAGES@,
+  };
+</script>
+<script src="shell.js"></script>
+</body>
+</html>

@@ -84,11 +84,16 @@
 #include <aurora/event.h>
 #include <borealis/aurora_log.h>
 #include <borealis/cli.hpp>
+#ifndef __EMSCRIPTEN__
 #include <borealis/crash.hpp>
+#endif
 #include <borealis/io.hpp>
 #include <borealis/sentry.hpp>
 #include <borealis/task.hpp>
 #include <borealis/version.h>
+#ifdef __EMSCRIPTEN__
+#include "dusk/web/disc.hpp"
+#endif
 #include <cxxopts.hpp>
 #include <dolphin/dvd.h>
 #include <SDL3/SDL_init.h>
@@ -147,6 +152,17 @@ s32 LOAD_COPYDATE(void*) {
 }
 
 AuroraInfo auroraInfo;
+
+// Opens the game disc. On the web the disc is a "webdisc://" location the page attached rather
+// than a file (see dusk/web/disc.hpp).
+static bool OpenDvd(const std::string& path) {
+#ifdef __EMSCRIPTEN__
+    if (dusk::web::disc::is_location(path)) {
+        return aurora_dvd_open_io(dusk::web::disc::open_stream(dusk::web::disc::channel()));
+    }
+#endif
+    return aurora_dvd_open(path.c_str());
+}
 
 bool launchUILoop() {
     while (dusk::IsRunning && !dusk::IsGameLaunched) {
@@ -653,7 +669,10 @@ int game_main(int argc, char* argv[]) {
         sentryOptions.attachments.emplace_back(logPath);
     }
     borealis::sentry::initialize(sentryOptions);
+#ifndef __EMSCRIPTEN__
+    // The web build has no native crash handler; the page reports wasm traps instead.
     borealis::crash::install();
+#endif
     // TODO: How to handle this?
     // PADSetDefaultMapping(&defaultPadMapping, PAD_TYPE_STANDARD);
 
@@ -801,7 +820,7 @@ int game_main(int argc, char* argv[]) {
             dusk::iso::ValidationError::Success)
         {
             DuskLog.info("Loading DVD image from command line: {}", dvdPath);
-            dvd_opened = aurora_dvd_open(dvdPath.c_str());
+            dvd_opened = OpenDvd(dvdPath);
             if (!dvd_opened) {
                 DuskLog.warn("Failed to open DVD image from command line: {}, opening prelaunch UI",
                     dvdPath);
@@ -895,7 +914,7 @@ int game_main(int argc, char* argv[]) {
             DuskLog.fatal("DVD image failed validation: {}", dvdPath);
         }
         DuskLog.info("Loading DVD image: {}", dvdPath);
-        if (!aurora_dvd_open(dvdPath.c_str())) {
+        if (!OpenDvd(dvdPath)) {
             DuskLog.fatal("Failed to open DVD image: {}", dvdPath);
         }
 

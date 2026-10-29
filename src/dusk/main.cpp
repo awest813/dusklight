@@ -21,6 +21,10 @@
 #include <string_view>
 #include <vector>
 
+#if defined(__EMSCRIPTEN__)
+#include "dusk/web/platform.hpp"
+#endif
+
 #if !defined(_WIN32)
 #include <unistd.h>
 #if defined(__APPLE__)
@@ -38,6 +42,11 @@ bool RestartProcess(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
     return false;
+#elif defined(__EMSCRIPTEN__)
+    (void)argc;
+    (void)argv;
+    dusk::web::reload();
+    return true;
 #elif _WIN32
     std::wstring commandLine = GetCommandLineW();
     STARTUPINFOW startupInfo{};
@@ -211,6 +220,9 @@ int RunWindowsGuiEntryPoint() {
 }
 #else
 int DuskMain(int argc, char* argv[]) {
+#if defined(__EMSCRIPTEN__)
+    dusk::web::initialize();
+#endif
     const int result = game_main(argc, argv);
     if (dusk::RestartRequested && RestartProcess(argc, argv)) {
         return 0;
