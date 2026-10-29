@@ -82,6 +82,7 @@
 
 <div id="fatal" hidden role="alertdialog" aria-labelledby="fatal-title">
   <h2 id="fatal-title">Dusklight stopped</h2>
+  <p id="fatal-hint" hidden></p>
   <pre id="fatal-message"></pre>
   <div class="actions">
     <button id="fatal-log">Download log</button>

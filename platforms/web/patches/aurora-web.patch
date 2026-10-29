@@ -222,7 +222,7 @@ index 94481a4..cb38a86 100644
  
    NodHandle* discHandle;
 diff --git a/lib/gfx/frame.cpp b/lib/gfx/frame.cpp
-index e005a60..1792277 100644
+index e005a60..0933f06 100644
 --- a/lib/gfx/frame.cpp
 +++ b/lib/gfx/frame.cpp
 @@ -5,6 +5,7 @@
@@ -233,7 +233,36 @@ index e005a60..1792277 100644
  #include "tex_copy_conv.hpp"
  #include "tex_palette_conv.hpp"
  #include "texture_replacement.hpp"
-@@ -179,7 +180,14 @@ void wait_for_gpu_progress(std::chrono::nanoseconds sleepDuration) {
+@@ -19,7 +20,9 @@
+ #include <atomic>
+ #include <chrono>
+ #include <cstdint>
++#include <cstdlib>
+ #include <deque>
++#include <memory>
+ #include <mutex>
+ #include <optional>
+ #include <string>
+@@ -49,6 +52,18 @@ enum class BufferMapState {
+ 
+ std::array<wgpu::Buffer, StagingBufferCount> g_stagingBuffers;
+ std::array<std::atomic<BufferMapState>, StagingBufferCount> g_mappingStates;
++#ifdef __EMSCRIPTEN__
++// Mapping a buffer in a browser hands out a JS ArrayBuffer, which the WebGPU bindings mirror with a
++// zeroed heap allocation of the whole mapped range and copy back in full on Unmap: about 63 MiB
++// allocated, cleared and copied every frame, however little the frame used. Instead, frames are
++// recorded into this heap block, and end_frame writes only the used part of each region to the
++// staging buffer. One block is enough, since render work runs inline (render_worker.cpp): a frame's
++// data is written out before the next frame starts recording.
++struct FreeDeleter {
++  void operator()(u8* p) const noexcept { std::free(p); }
++};
++std::unique_ptr<u8[], FreeDeleter> g_stagingMemory;
++#endif
+ uint32_t g_frameIndex = UINT32_MAX;
+ 
+ std::array<FramePacket, FrameSlotCount> g_framePackets;
+@@ -179,7 +194,14 @@ void wait_for_gpu_progress(std::chrono::nanoseconds sleepDuration) {
    if (render_worker::is_idle()) {
      enqueue_process_events();
    }
@@ -248,6 +277,121 @@ index e005a60..1792277 100644
  }
  
  void pace_frame_start() {
+@@ -220,6 +242,13 @@ void map_staging_buffer(size_t slot, bool releaseSlotOnCompletion = false) {
+     return;
+   }
+ 
++#ifdef __EMSCRIPTEN__
++  g_mappingStates[slot].store(BufferMapState::Mapped, std::memory_order_release);
++  if (releaseSlotOnCompletion) {
++    g_stagingSlots.release(slot);
++  }
++  return;
++#endif
+   g_stagingBuffers[slot].MapAsync(
+       wgpu::MapMode::Write, 0, StagingBufferSize, wgpu::CallbackMode::AllowSpontaneous,
+       [slot, releaseSlotOnCompletion](wgpu::MapAsyncStatus status, wgpu::StringView message) {
+@@ -239,6 +268,27 @@ void map_staging_buffer(size_t slot, bool releaseSlotOnCompletion = false) {
+         }
+       });
+ }
++#ifdef __EMSCRIPTEN__
++// Copies the used part of each region of g_stagingMemory to the same offsets in `buffer`, in the
++// order begin_frame lays them out (and encoding.cpp reads them).
++void write_staging_buffer(const wgpu::Buffer& buffer, const AuroraStats& stats) {
++  ZoneScopedN("Write staging buffer");
++  uint64_t offset = 0;
++  const auto write = [&](uint64_t used, uint64_t capacity) {
++    if (used > 0) {
++      g_queue.WriteBuffer(buffer, offset, g_stagingMemory.get() + offset, AURORA_ALIGN(used, 4));
++    }
++    offset += capacity;
++  };
++  write(stats.lastVertSize, VertexBufferSize);
++  write(stats.lastUniformSize, UniformBufferSize);
++  write(stats.lastIndexSize, IndexBufferSize);
++  write(stats.lastStorageSize, StorageBufferSize);
++  if constexpr (UseTextureBuffer) {
++    write(stats.lastTextureUploadSize, TextureUploadSize);
++  }
++}
++#endif
+ } // namespace
+ 
+ namespace detail {
+@@ -428,9 +478,17 @@ void initialize() {
+                "Shared Storage Buffer");
+   for (size_t i = 0; i < g_stagingBuffers.size(); ++i) {
+     const auto label = fmt::format("Staging Buffer {}", i);
+-    createBuffer(g_stagingBuffers[i], wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::CopySrc, StagingBufferSize,
+-                 label.c_str());
++#ifdef __EMSCRIPTEN__
++    constexpr auto stagingUsage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
++#else
++    constexpr auto stagingUsage = wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::CopySrc;
++#endif
++    createBuffer(g_stagingBuffers[i], stagingUsage, StagingBufferSize, label.c_str());
+   }
++#ifdef __EMSCRIPTEN__
++  g_stagingMemory.reset(static_cast<u8*>(std::aligned_alloc(16, StagingBufferSize)));
++  AURORA_ASSERT(g_stagingMemory, "Failed to allocate {} bytes of staging memory", StagingBufferSize);
++#endif
+   for (auto& state : g_mappingStates) {
+     state.store(BufferMapState::Unmapped, std::memory_order_release);
+   }
+@@ -561,6 +619,9 @@ void shutdown() {
+   g_resources.indexBuffer = {};
+   g_resources.storageBuffer = {};
+   g_stagingBuffers.fill({});
++#ifdef __EMSCRIPTEN__
++  g_stagingMemory.reset();
++#endif
+   for (auto& packet : g_framePackets) {
+     packet = {};
+   }
+@@ -641,7 +702,12 @@ bool begin_frame() {
+     if (size <= 0) {
+       return;
+     }
++#ifdef __EMSCRIPTEN__
++    (void)stagingBuf;
++    buf = ByteBuffer{g_stagingMemory.get() + bufferOffset, static_cast<size_t>(size)};
++#else
+     buf = ByteBuffer{static_cast<u8*>(stagingBuf.GetMappedRange(bufferOffset, size)), static_cast<size_t>(size)};
++#endif
+     bufferOffset += size;
+   };
+   mapBuffer(frame.verts, VertexBufferSize);
+@@ -681,7 +747,11 @@ void end_frame(EndFrameCallback callback) {
+   const size_t stagingSlot = frame.stagingBuffer;
+   render_worker::enqueue_end_frame(frameId, [frameSlot, stagingSlot, callback = std::move(callback)]() mutable {
+     auto& packet = g_framePackets[frameSlot];
++#ifdef __EMSCRIPTEN__
++    write_staging_buffer(g_stagingBuffers[stagingSlot], packet.stats);
++#else
+     g_stagingBuffers[stagingSlot].Unmap();
++#endif
+     g_mappingStates[stagingSlot].store(BufferMapState::Unmapped, std::memory_order_release);
+     auto encoder = std::move(packet.encoder);
+     const auto stats = packet.stats;
+diff --git a/lib/gfx/frame.hpp b/lib/gfx/frame.hpp
+index 0b86ffe..d25b8ba 100644
+--- a/lib/gfx/frame.hpp
++++ b/lib/gfx/frame.hpp
+@@ -8,7 +8,13 @@
+ namespace aurora::gfx::detail {
+ 
+ inline constexpr size_t FrameSlotCount = 2;
++#ifdef __EMSCRIPTEN__
++// The web fills the staging buffer with Queue::WriteBuffer when a frame ends (frame.cpp), which the
++// queue orders after the previous frame's reads, so one is enough.
++inline constexpr size_t StagingBufferCount = 1;
++#else
+ inline constexpr size_t StagingBufferCount = FrameSlotCount + 3;
++#endif
+ inline constexpr uint64_t StagingBufferSize = UniformBufferSize + VertexBufferSize + IndexBufferSize +
+                                               StorageBufferSize + (UseTextureBuffer ? TextureUploadSize : 0);
+ 
 diff --git a/lib/gfx/pipeline_cache.cpp b/lib/gfx/pipeline_cache.cpp
 index 4dc6337..169697e 100644
 --- a/lib/gfx/pipeline_cache.cpp

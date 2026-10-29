@@ -72,9 +72,28 @@ function showFatal(message) {
   const tail = log.filter((line) => !line.startsWith('fatal: ')).slice(-15).join('\n');
   $('fatal-message').textContent = [...fatalReasons, tail ? `Last log lines:\n${tail}` : '']
     .filter(Boolean).join('\n\n') || 'The game stopped unexpectedly.';
+  const hint = fatalHint(fatalReasons.join('\n') + '\n' + tail);
+  $('fatal-hint').textContent = hint ?? '';
+  $('fatal-hint').hidden = !hint;
   fatalShown = true;
   playing = false;
   $('fatal').hidden = false;
+}
+
+// What a player can make of the failures that have a likely cause.
+function fatalHint(text) {
+  if (/Device lost/.test(text)) {
+    return 'The browser lost its connection to the graphics card, for example because the driver restarted. ' +
+      'Reloading usually fixes this. Progress since your last save is lost.';
+  }
+  if (/WebGPU error/.test(text)) {
+    return 'The browser rejected something the game asked the graphics card to do. This is a bug in Dusklight: ' +
+      'please report it with the log.';
+  }
+  if (/Failed to create (adapter|device)|Device request failed|Ignoring CPU adapter|Error creating window/.test(text)) {
+    return 'The game could not use the graphics card. chrome://gpu shows whether WebGPU is available.';
+  }
+  return null;
 }
 
 $('fatal-log').onclick = () => download('dusklight-log.txt', new Blob([log.join('\n')], { type: 'text/plain' }));
@@ -84,17 +103,41 @@ window.addEventListener('unhandledrejection', (e) => showFatal(e.reason?.stack ?
 
 // --- Browser support --------------------------------------------------------------------------
 
-function missingFeatures() {
+async function missingFeatures() {
   const missing = [];
   if (!globalThis.crossOriginIsolated) {
     missing.push('Cross-origin isolation (the site must be served with COOP/COEP headers).');
   }
-  if (!navigator.gpu) missing.push('WebGPU.');
+  if (!navigator.gpu) {
+    missing.push('WebGPU.');
+  } else {
+    const problem = await webgpuProblem();
+    if (problem) missing.push(problem);
+  }
   if (typeof WebAssembly.Suspending !== 'function') {
     missing.push('WebAssembly JavaScript Promise Integration (JSPI).');
   }
   if (!navigator.storage?.getDirectory) missing.push('The origin private file system (OPFS).');
   return missing;
+}
+
+// The game asks for the same kind of adapter (aurora's webgpu::initialize), so finding out here tells
+// the player before they choose a disc rather than after.
+async function webgpuProblem() {
+  let adapter = null;
+  try {
+    adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance', featureLevel: 'compatibility' });
+  } catch {
+    // Treated like no adapter.
+  }
+  if (!adapter) {
+    return 'A WebGPU graphics adapter. WebGPU may be turned off for this graphics card or driver; chrome://gpu says why.';
+  }
+  // Every draw passes 64 bytes of immediate data (aurora's gx::DrawImmediateData).
+  if (!(adapter.limits.maxImmediateSize >= 64) || typeof GPURenderPassEncoder.prototype.setImmediates !== 'function') {
+    return 'WebGPU immediate data, in newer versions of Chrome and Edge.';
+  }
+  return null;
 }
 
 // --- Disc images ------------------------------------------------------------------------------
@@ -440,7 +483,7 @@ async function setup() {
   if (await isolateThroughServiceWorker()) return;
   sessionStorage.removeItem('dusklight.isolationReload');
 
-  const missing = missingFeatures();
+  const missing = await missingFeatures();
   if (missing.length) {
     $('unsupported-list').replaceChildren(...missing.map((m) => Object.assign(document.createElement('li'), { textContent: m })));
     $('unsupported').hidden = false;

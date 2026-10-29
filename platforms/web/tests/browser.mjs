@@ -13,7 +13,15 @@ const require = createRequire(import.meta.url);
 export function launchChromium() {
   const { chromium } = require('playwright');
   return chromium.launch({
-    args: ['--enable-unsafe-webgpu', '--enable-unsafe-swiftshader', '--use-webgpu-adapter=swiftshader'],
+    args: [
+      // Chromium only offers SwiftShader as a WebGPU adapter with --enable-unsafe-webgpu, which also
+      // turns on Dawn's experimental APIs. Turn those back off, so the game sees the features a
+      // player's stable Chrome offers and a dependency on an experimental one fails here.
+      '--enable-unsafe-webgpu',
+      '--disable-dawn-features=allow_unsafe_apis',
+      '--enable-unsafe-swiftshader',
+      '--use-webgpu-adapter=swiftshader',
+    ],
   });
 }
 

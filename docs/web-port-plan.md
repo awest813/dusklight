@@ -640,6 +640,14 @@ GPUs. Main-thread CPU use and startup are representative.
   now sleeps until the queue's submitted work is done (`wait_for_gpu_work` in the aurora patch). The
   main thread went from 7% to 83% idle on the prelaunch screen, and frames got slightly faster,
   since the spin no longer competes with the GPU process.
+- **Fixed: every frame mapped, cleared and copied 63 MiB.** aurora maps its whole staging buffer
+  (vertices, uniforms, indices, storage and texture uploads) for each frame. In a browser, the
+  WebGPU bindings mirror a mapped range with a zeroed heap allocation and copy all of it back on
+  unmap, however little the frame wrote. On the web, frames are now recorded into one heap block,
+  and only the used part of each region goes to the GPU with `queue.writeBuffer` (aurora patch,
+  `lib/gfx/frame.cpp`). One staging buffer replaces five, so Chrome no longer keeps 315 MiB of
+  shared memory for mappable buffers. On SwiftShader, the prelaunch screen went from 7.7 to 60
+  frames/s, and the main thread's time per frame from about 30 ms to about 3 ms.
 - **Fixed: frame-limiter sleeps were too coarse.** Browsers round short `setTimeout`s, and so
   `emscripten_sleep` and `SDL_Delay`, up to about 4 ms (a 1 ms sleep took 3.8 ms on average).
   `Limiter::NanoSleep` uses `Atomics.waitAsync` on the web instead (1.1 ms).
@@ -661,6 +669,26 @@ GPUs. Main-thread CPU use and startup are representative.
     WebGPU submission);
   - pipeline compilation hitches;
   - the audio mixer's cost.
+
+### WebGPU
+
+- **Tests see stable Chrome's features.** SwiftShader is only offered with
+  `--enable-unsafe-webgpu`, which also turns on Dawn's experimental APIs, so the browser tests
+  turn those back off (`--disable-dawn-features=allow_unsafe_apis`) and CI pins Playwright 1.63
+  (Chromium 153). On that feature set, the game still renders and boots the synthetic disc.
+  It needs immediate data (`setImmediates`, 64 bytes); `texture-component-swizzle`,
+  `dual-source-blending` and BC compression are used when present.
+- **The page checks the adapter before a disc is chosen.** It asks for the same kind of adapter as
+  the game. If the browser has none (WebGPU is off for that GPU or driver), or no immediate data
+  (an older Chrome), the player is told so on the start page.
+- **Device loss and WebGPU validation errors** stop the game as before (aurora treats both as
+  fatal), and the error overlay now says what they mean: reload after a lost device, report a
+  validation error.
+- **Already suitable:** the adapter request (high performance, compatibility feature level, the
+  canvas as compatible surface), the canvas format (the browser's preferred one, opaque),
+  multisampling (always 1), and pipeline creation. With no pipeline thread on the web, aurora
+  builds at most five pipelines per frame and skips draws whose pipeline isn't built yet, so a
+  burst of new pipelines can't stall the main thread.
 
 ### Ready for players
 
@@ -693,7 +721,8 @@ GPUs. Main-thread CPU use and startup are representative.
 
 - **Boot to the title screen from a real disc (Phase 4 exit).** Watch for:
   - more function-signature traps on code paths the synthetic disc doesn't reach;
-  - JSPI and WebGPU feature gaps (`TextureComponentSwizzle`, compatibility limits);
+  - pipeline compilation hitches in the GPU process: if they show, create pipelines with
+    `createRenderPipelineAsync` (aurora already skips draws while a pipeline is pending);
   - V8's native stack limit on deep game call chains;
   - thread pool exhaustion.
 - **Frame pacing.** Present waits for `requestAnimationFrame`, and the 30 fps `waitForTick` sleep

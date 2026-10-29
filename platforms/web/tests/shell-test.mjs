@@ -81,6 +81,31 @@ try {
     await noGpu.close();
   }
 
+  // WebGPU without a usable adapter (a blocklisted GPU or driver), or without immediate data (an
+  // older Chrome), is also caught before a disc is chosen.
+  for (const [what, stub, expected] of [
+    ['no adapter', () => { GPU.prototype.requestAdapter = async () => null; }, 'graphics adapter'],
+    ['no immediate data', () => { delete GPURenderPassEncoder.prototype.setImmediates; }, 'immediate data'],
+  ]) {
+    const limited = await context.newPage();
+    await limited.addInitScript(stub);
+    await limited.goto(isolated.base);
+    await limited.waitForSelector('#unsupported:not([hidden])');
+    check((await limited.textContent('#unsupported-list')).includes(expected), `${what}: the player is told before choosing a disc`);
+    await limited.close();
+  }
+
+  // A lost GPU device comes with an explanation as well as the log.
+  {
+    const lost = await context.newPage();
+    await lost.goto(isolated.base);
+    await lost.waitForSelector('#disc:not([hidden])');
+    await lost.evaluate(() => setTimeout(() => { throw new Error('FATAL: Device lost: GPU process exited'); }));
+    await lost.waitForSelector('#fatal:not([hidden])');
+    check((await lost.textContent('#fatal-hint')).includes('Reloading usually fixes this'), 'a lost device is explained');
+    await lost.close();
+  }
+
   // A host that doesn't send the isolation headers: coi-sw.js adds them after one reload.
   {
     const plainContext = await browser.newContext();
