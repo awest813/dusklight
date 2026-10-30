@@ -34,7 +34,7 @@
   <section id="disc" hidden>
     <div id="stored" hidden>
       <h2>Your disc</h2>
-      <p><strong id="stored-name"></strong> is stored in this browser.</p>
+      <p><strong id="stored-name"></strong> <span id="stored-size"></span> is stored in this browser.</p>
       <div class="actions">
         <button id="play-stored" class="primary">Play</button>
         <button id="forget-stored">Remove it</button>
@@ -68,6 +68,8 @@
   <section id="saves" hidden>
     <h2>Saves and settings</h2>
     <p>They're kept in this browser. Clearing this site's data deletes them, so back them up.</p>
+    <p id="not-persisted" hidden>This browser may also delete them by itself if your disk runs low on space.
+      Bookmarking this page can prevent that.</p>
     <div class="actions">
       <button id="export-saves">Back up</button>
       <label class="button">Restore a backup<input id="import-saves" type="file" accept=".zip"></label>

@@ -14,7 +14,8 @@
 // SwiftShader, so the page's canvas context is replaced with one that hands out ordinary textures
 // on the same device: the game's whole render and present path still runs, only the browser's
 // final compositing is skipped. The test passes when frames with visible content were presented
-// and the page reported no fatal error.
+// and the page reported no fatal error, and fails if the GPU's queue of submitted work keeps
+// growing (the game must not run ahead of a slow GPU).
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -45,6 +46,7 @@ const base = `http://127.0.0.1:${server.address().port}/`;
 
 const browser = await launchChromium();
 let failure = null;
+let backlogFailure = null;
 try {
   const page = await browser.newPage({ viewport: { width: 960, height: 720 } });
   await page.addInitScript(installOffscreenCanvasContext);
@@ -81,7 +83,12 @@ try {
     }
     const frames = await page.evaluate(() => globalThis.duskTestFrames ?? 0);
     sample = await page.evaluate(() => globalThis.duskTestSampleFrame?.());
-    console.log(`run-page: ${frames} frames presented; last frame ${JSON.stringify(sample)}`);
+    const backlog = await page.evaluate(() => globalThis.duskTestGpuBacklog?.() ?? 0);
+    console.log(`run-page: ${frames} frames presented; last frame ${JSON.stringify(sample)}; ${backlog} submissions in flight`);
+    if (backlog > 8) {
+      backlogFailure = `the GPU has ${backlog} submissions queued: the game is not waiting for it`;
+      break;
+    }
     if (!expectLogs.length && frames >= 30 && sample && sample.colours >= 8) break;
   }
   if (expectLogs.length) {
@@ -101,6 +108,7 @@ try {
   await browser.close();
   server.close();
 }
+failure ??= backlogFailure;
 
 if (failure) {
   console.error(`run-page: FAIL: ${failure}`);

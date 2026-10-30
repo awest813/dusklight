@@ -39,7 +39,11 @@ disc on the page.
 Saves and settings are kept in your browser's storage for this site, so they are still there next
 time. Clearing the site's data (or your browser's history, with "cookies and site data") deletes
 them, so **back them up** with the page's **Back up** button. **Restore a backup** brings a backup
-back into this browser, for example after clearing data or on another computer.
+back into this browser, for example after clearing data or on another computer. Backups hold your
+saves and settings, not the disc image or logs.
+
+Unless the browser has agreed to keep the site's data (the page tells you if it hasn't), it may
+also delete it by itself when your disk is nearly full. Bookmarking the page can help.
 
 Only one tab can run Dusklight at a time.
 
@@ -49,6 +53,8 @@ Only one tab can run Dusklight at a time.
   On some computers, WebGPU is turned off for the graphics driver. Check `chrome://gpu`.
 - **"Dusklight stopped":** something went wrong in the game. **Download log** saves what happened.
   Please include it when you report the problem. **Reload** goes back to the start page.
+- **"The browser could not give the game enough memory":** Dusklight needs about 1 GB. Close other
+  tabs or programs and reload.
 - **The game is slow:** close other heavy tabs, and make sure the browser uses your graphics card
   (`chrome://gpu`).
 - **Your disc is rejected:** check that it is the GameCube version, uncompressed, and Twilight

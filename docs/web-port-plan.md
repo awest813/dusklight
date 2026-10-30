@@ -645,9 +645,16 @@ GPUs. Main-thread CPU use and startup are representative.
   WebGPU bindings mirror a mapped range with a zeroed heap allocation and copy all of it back on
   unmap, however little the frame wrote. On the web, frames are now recorded into one heap block,
   and only the used part of each region goes to the GPU with `queue.writeBuffer` (aurora patch,
-  `lib/gfx/frame.cpp`). One staging buffer replaces five, so Chrome no longer keeps 315 MiB of
-  shared memory for mappable buffers. On SwiftShader, the prelaunch screen went from 7.7 to 60
-  frames/s, and the main thread's time per frame from about 30 ms to about 3 ms.
+  `lib/gfx/frame.cpp`). A staging slot is reused once the GPU has finished its frame
+  (`onSubmittedWorkDone`), which keeps the CPU at most two frames ahead, as waiting for the mapping
+  did. The main thread's time per frame went from about 30 ms to about 4 ms, and the GPU process
+  from about 840 MB to 350 MB, since Chrome no longer keeps shared memory for five mappable 63 MiB
+  buffers. The frame rate on SwiftShader is unchanged (about 8 frames/s): the GPU is the limit
+  there.
+  - The first version of this change had no such wait. On a GPU slower than the display, the game
+    ran ahead and the browser queued its frames without limit: about 5 MB more GPU-process memory
+    per second, and seconds of latency. `run-page.mjs` now fails if the GPU's queue of submitted
+    work keeps growing.
 - **Fixed: frame-limiter sleeps were too coarse.** Browsers round short `setTimeout`s, and so
   `emscripten_sleep` and `SDL_Delay`, up to about 4 ms (a 1 ms sleep took 3.8 ms on average).
   `Limiter::NanoSleep` uses `Atomics.waitAsync` on the web instead (1.1 ms).
@@ -689,6 +696,34 @@ GPUs. Main-thread CPU use and startup are representative.
   multisampling (always 1), and pipeline creation. With no pipeline thread on the web, aurora
   builds at most five pipelines per frame and skips draws whose pipeline isn't built yet, so a
   burst of new pipelines can't stall the main thread.
+
+### Memory and storage
+
+Measured in headless Chromium with the synthetic disc.
+
+- **Memory:** about 700 MB for the page and 350 MB for the GPU process once the game runs, flat
+  over time.
+  - The page's share is mostly the GameCube memory the game allocates (256 MiB MEM1, 24 MiB ARAM,
+    both cleared at startup, as on native), the 63 MiB staging block, and the 24 prespawned
+    threads, about 5 MB each.
+  - The game starts 16 to 18 threads; the pool keeps the headroom, since a thread that isn't
+    prespawned can't start while the main thread waits for it.
+  - The module starts with 1 GiB of memory and can grow to 4 GiB. Untouched pages cost nothing.
+- **Saves and settings** are written as on native: to a temporary file, then renamed over the old
+  one. `platforms/web/tests/web-storage` checks those operations on WasmFS's OPFS backend and
+  that the results survive a reload.
+  - WasmFS cannot move directories on OPFS (`EBUSY`), which broke replacing a save's mod data
+    (importing a `.dusksave`, deleting a save). `save_manager.cpp` moves their files one by one
+    on the web.
+- **Logs** stay within borealis's limits (10 files, 100 MB) and are left out of backups.
+- **The stored disc image:**
+  - An interrupted copy is removed on the next visit, instead of taking up to 1.4 GB unseen.
+  - Removing the disc right after playing waits for the previous page's disc worker to let go
+    of it. Before, the page forgot the disc but the file stayed.
+  - Replacing a stored disc counts the space it frees.
+- **Persistence:** the page asks for persistent storage on every visit and, if the browser
+  hasn't granted it, says that the browser may clear saves when the disk runs low.
+- Running out of memory now comes with an explanation on the error screen.
 
 ### Ready for players
 

@@ -95,15 +95,18 @@ try {
     await limited.close();
   }
 
-  // A lost GPU device comes with an explanation as well as the log.
-  {
-    const lost = await context.newPage();
-    await lost.goto(isolated.base);
-    await lost.waitForSelector('#disc:not([hidden])');
-    await lost.evaluate(() => setTimeout(() => { throw new Error('FATAL: Device lost: GPU process exited'); }));
-    await lost.waitForSelector('#fatal:not([hidden])');
-    check((await lost.textContent('#fatal-hint')).includes('Reloading usually fixes this'), 'a lost device is explained');
-    await lost.close();
+  // Failures with a likely cause come with an explanation as well as the log.
+  for (const [what, error, expected] of [
+    ['a lost device', 'FATAL: Device lost: GPU process exited', 'Reloading usually fixes this'],
+    ['running out of memory', 'Aborted(Cannot enlarge memory arrays to size 4294967296 bytes (OOM).)', 'enough memory'],
+  ]) {
+    const failed = await context.newPage();
+    await failed.goto(isolated.base);
+    await failed.waitForSelector('#disc:not([hidden])');
+    await failed.evaluate((message) => setTimeout(() => { throw new Error(message); }), error);
+    await failed.waitForSelector('#fatal:not([hidden])');
+    check((await failed.textContent('#fatal-hint')).includes(expected), `${what} is explained`);
+    await failed.close();
   }
 
   // A host that doesn't send the isolation headers: coi-sw.js adds them after one reload.
@@ -181,17 +184,22 @@ try {
   await page.goto(isolated.base);
   await page.waitForSelector('#stored:not([hidden])');
   check((await page.textContent('#stored-name')) === 'Synthetic Disc.iso', 'stored disc is offered on the next visit');
+  check((await page.textContent('#stored-size')).includes('MB'), 'its size is shown');
   await page.click('#play-stored');
   await expectReads('stored disc');
 
-  // Save backup and restore round trip; the disc image stays out of backups.
+  // Save backup and restore round trip; the disc image and logs stay out of backups.
   await page.goto(isolated.base);
   await page.waitForSelector('#saves:not([hidden])');
+  // Headless Chromium doesn't grant persistent storage, so players are told what that means.
+  check(await page.isVisible('#not-persisted'), 'the page says when storage is not persistent');
   await page.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
     const dir = await (await root.getDirectoryHandle('TwilitRealm', { create: true })).getDirectoryHandle('Dusklight', { create: true });
-    for (const [name, text] of [['config.json', '{"a":1}'], ['MemoryCardA.USA.raw', 'card-bytes']]) {
-      const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+    const logs = await dir.getDirectoryHandle('logs', { create: true });
+    for (const [where, name, text] of [[dir, 'config.json', '{"a":1}'], [dir, 'MemoryCardA.USA.raw', 'card-bytes'],
+      [logs, 'dusklight-20261030-000000.log', 'log']]) {
+      const w = await (await where.getFileHandle(name, { create: true })).createWritable();
       await w.write(text);
       await w.close();
     }
@@ -202,6 +210,7 @@ try {
   const zip = await readFile(zipPath);
   check(zip.includes('TwilitRealm/Dusklight/config.json') && !zip.includes('dusklight-disc'),
     'backup has the saves and not the disc image');
+  check(!zip.includes('/logs/'), 'backup leaves out the logs');
   await page.evaluate(async () => (await navigator.storage.getDirectory()).removeEntry('TwilitRealm', { recursive: true }));
   await page.setInputFiles('#import-saves', zipPath);
   const readCard = () => page.evaluate(async () => {
@@ -259,9 +268,29 @@ try {
   check(audio.underruns === 212, 'audio worklet counts the frames it had to fill');
 
   await page.click('#forget-stored');
+  await page.waitForSelector('#stored', { state: 'hidden', timeout: 10_000 });
   await page.goto(isolated.base);
   await page.waitForSelector('#disc:not([hidden])');
   check(await page.isHidden('#stored'), 'a removed disc is no longer offered');
+
+  // A copy interrupted by closing the tab leaves part of an image that was never recorded; it is
+  // removed on the next visit instead of taking up storage unseen.
+  await page.evaluate(async () => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('dusklight-disc', { create: true });
+    const w = await (await dir.getFileHandle('Partial.iso', { create: true })).createWritable();
+    await w.write(new Uint8Array(4096));
+    await w.close();
+  });
+  await page.reload();
+  await page.waitForSelector('#disc:not([hidden])');
+  check(await page.evaluate(async () => {
+    try {
+      await (await navigator.storage.getDirectory()).getDirectoryHandle('dusklight-disc');
+      return false;
+    } catch {
+      return true;
+    }
+  }), 'an interrupted copy is cleaned up');
 } finally {
   await browser.close();
   isolated.server.close();

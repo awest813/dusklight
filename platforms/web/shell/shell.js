@@ -90,6 +90,9 @@ function fatalHint(text) {
     return 'The browser rejected something the game asked the graphics card to do. This is a bug in Dusklight: ' +
       'please report it with the log.';
   }
+  if (/Cannot enlarge memory|out of memory|could not allocate memory|Array buffer allocation failed/i.test(text)) {
+    return 'The browser could not give the game enough memory. Close other tabs or programs and reload.';
+  }
   if (/Failed to create (adapter|device)|Device request failed|Ignoring CPU adapter|Error creating window/.test(text)) {
     return 'The game could not use the graphics card. chrome://gpu shows whether WebGPU is available.';
   }
@@ -164,13 +167,23 @@ async function storedDisc() {
   }
 }
 
+// Removes the stored disc image. For a couple of seconds after a reload, the previous page's disc
+// worker can still hold the image open, so a locked image is retried for a while. Returns whether
+// nothing is stored any more; the disc is only forgotten once its files are gone.
 async function forgetStoredDisc() {
-  localStorage.removeItem(STORED_DISC_KEY);
-  try {
-    await (await navigator.storage.getDirectory()).removeEntry(DISC_DIR, { recursive: true });
-  } catch {
-    // Nothing stored.
+  const root = await navigator.storage.getDirectory();
+  for (const deadline = performance.now() + 5000; ;) {
+    try {
+      await root.removeEntry(DISC_DIR, { recursive: true });
+      break;
+    } catch (e) {
+      if (e.name === 'NotFoundError') break;
+      if (e.name !== 'NoModificationAllowedError' || performance.now() > deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   }
+  localStorage.removeItem(STORED_DISC_KEY);
+  return true;
 }
 
 // Returns an error message for images the game can't read, or null.
@@ -192,7 +205,9 @@ async function checkImage(file) {
 }
 
 async function copyIntoBrowser(file, onProgress) {
-  await forgetStoredDisc();
+  if (!(await forgetStoredDisc())) {
+    throw new Error('the disc image stored before is still in use. Reload the page and try again');
+  }
   const handle = await (await discDir(true)).getFileHandle(file.name, { create: true });
   const writable = await handle.createWritable();
   let written = 0;
@@ -228,9 +243,12 @@ function crc32(bytes) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
+// Everything the game keeps in OPFS except the stored disc and its logs (up to 100 MB, and not
+// something to restore).
 async function* walk(dir, prefix = '') {
   for await (const [name, handle] of dir.entries()) {
     if (!prefix && name === DISC_DIR) continue;
+    if (handle.kind === 'directory' && name === 'logs') continue;
     const path = prefix + name;
     if (handle.kind === 'directory') {
       yield* walk(handle, `${path}/`);
@@ -361,9 +379,6 @@ async function start(source) {
   canvas.hidden = false;
   canvas.oncontextmenu = (e) => e.preventDefault(); // the game may use the right mouse button
   canvas.focus();
-
-  // Saves and settings live in this origin's storage; ask the browser not to evict it.
-  navigator.storage.persist?.().catch(() => {});
   playing = true;
 
   await loadRuntime();
@@ -416,13 +431,15 @@ async function pick(file) {
   $('picked-size').textContent = `(${formatSize(file.size)})`;
 
   const { quota = 0, usage = 0 } = (await navigator.storage.estimate?.()) ?? {};
-  const fits = quota - usage > file.size * 1.05;
+  // A stored disc is removed before the new one is copied.
+  const available = quota - usage + ((await storedDisc())?.size ?? 0);
+  const fits = available > file.size * 1.05;
   const copy = document.querySelector('input[value=copy]');
   copy.disabled = !fits;
   (fits ? copy : document.querySelector('input[value=session]')).checked = true;
   $('copy-note').textContent = fits ?
-    `Uses ${formatSize(file.size)} of the ${formatSize(quota - usage)} this browser allows.` :
-    `Not enough browser storage (${formatSize(quota - usage)} available).`;
+    `Uses ${formatSize(file.size)} of the ${formatSize(available)} this browser allows.` :
+    `Not enough browser storage (${formatSize(available)} available).`;
   $('picked').hidden = false;
 }
 
@@ -436,7 +453,6 @@ async function playPicked() {
   const progress = $('progress');
   progress.hidden = false;
   try {
-    await navigator.storage.persist?.();
     await copyIntoBrowser(pickedFile, (fraction) => {
       progress.querySelector('progress').value = fraction;
       progress.querySelector('span').textContent = `Copying… ${Math.floor(fraction * 100)}%`;
@@ -479,6 +495,19 @@ function claimSingleInstance() {
   });
 }
 
+// Without persistent storage, the browser may clear this site's data (saves included) when the disk
+// runs low. Chrome decides on its own whether to grant it (bookmarked sites, for example), and asks
+// nobody, so asking on every visit costs nothing and picks up a new bookmark.
+async function showPersistence() {
+  let persisted = true;
+  try {
+    persisted = (await navigator.storage.persist?.()) ?? true;
+  } catch {
+    // Unknown: say nothing.
+  }
+  $('not-persisted').hidden = persisted;
+}
+
 async function setup() {
   if (await isolateThroughServiceWorker()) return;
   sessionStorage.removeItem('dusklight.isolationReload');
@@ -496,13 +525,23 @@ async function setup() {
   loadRuntime().catch((e) => showFatal(`Couldn't load Dusklight: ${e.message}`));
 
   const stored = await storedDisc();
+  if (!stored) {
+    // An interrupted copy (the tab closed while copying) leaves up to a whole disc image behind.
+    await forgetStoredDisc();
+  }
   if (stored) {
     $('stored-name').textContent = stored.name;
+    $('stored-size').textContent = `(${formatSize(stored.size)})`;
     $('stored').hidden = false;
     $('play-stored').onclick = () => start({ kind: 'opfs', dir: [DISC_DIR], name: stored.name });
     $('forget-stored').onclick = async () => {
-      await forgetStoredDisc();
-      $('stored').hidden = true;
+      $('forget-stored').disabled = true;
+      if (await forgetStoredDisc()) {
+        $('stored').hidden = true;
+      } else {
+        showError("Couldn't remove the stored disc image. Reload the page and try again.");
+      }
+      $('forget-stored').disabled = false;
     };
   }
 
@@ -532,6 +571,7 @@ async function setup() {
 
   $('disc').hidden = false;
   $('saves').hidden = false;
+  showPersistence();
 
   if (new URLSearchParams(location.search).has('nodisc')) {
     await start(null);

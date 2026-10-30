@@ -53,6 +53,18 @@ export function installOffscreenCanvasContext() {
     globalThis.duskTestLast = { texture: state.texture, device: state.config.device };
     return state.texture;
   };
+  // How many submissions the GPU hasn't finished yet. The game keeps at most two frames in flight,
+  // so a number that keeps growing means it runs ahead of the GPU and the browser queues its work.
+  const submit = GPUQueue.prototype.submit;
+  let submitted = 0;
+  let completed = 0;
+  GPUQueue.prototype.submit = function (buffers) {
+    const result = submit.call(this, buffers);
+    const n = ++submitted;
+    this.onSubmittedWorkDone().then(() => { completed = Math.max(completed, n); }, () => {});
+    return result;
+  };
+  globalThis.duskTestGpuBacklog = () => submitted - completed;
   // How many distinct colours a sample of the last presented frame has.
   globalThis.duskTestSampleFrame = async () => {
     const last = globalThis.duskTestLast;

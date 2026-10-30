@@ -546,6 +546,29 @@ ValueResult<std::vector<uint8_t>> read_current_gci(
     return {success(), {}};
 }
 
+// std::filesystem::rename for a directory. The web build's storage (WasmFS on OPFS) cannot move
+// directories, so there the directory is rebuilt at the new path from its moved files.
+void rename_directory(const std::filesystem::path& from, const std::filesystem::path& to) {
+#ifdef __EMSCRIPTEN__
+    std::vector<std::filesystem::directory_entry> entries;
+    for (const auto& entry : std::filesystem::directory_iterator(from)) {
+        entries.push_back(entry);
+    }
+    std::filesystem::create_directory(to);
+    for (const auto& entry : entries) {
+        const auto target = to / entry.path().filename();
+        if (entry.is_directory()) {
+            rename_directory(entry.path(), target);
+        } else {
+            std::filesystem::rename(entry.path(), target);
+        }
+    }
+    std::filesystem::remove(from);
+#else
+    std::filesystem::rename(from, to);
+#endif
+}
+
 Result replace_sidecars(const Storage& storage, const SaveIdentity& identity,
     const std::map<std::string, std::vector<uint8_t>>& files) {
     const auto destination = save_sidecar_directory(
@@ -571,14 +594,14 @@ Result replace_sidecars(const Storage& storage, const SaveIdentity& identity,
             }
         }
         if (std::filesystem::exists(destination)) {
-            std::filesystem::rename(destination, previous);
+            rename_directory(destination, previous);
         }
         if (!files.empty()) {
             try {
-                std::filesystem::rename(staging, destination);
+                rename_directory(staging, destination);
             } catch (...) {
                 if (std::filesystem::exists(previous)) {
-                    std::filesystem::rename(previous, destination);
+                    rename_directory(previous, destination);
                 }
                 throw;
             }

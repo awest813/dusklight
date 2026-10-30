@@ -351,6 +351,11 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/web-audio/run.mjs
 
+      - name: Test save and settings storage on OPFS in headless Chromium
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/web-storage/run.mjs
+
       - name: Smoke test in headless Chromium (no disc, prelaunch screen)
         run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/run-page.mjs build/web
 

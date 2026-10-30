@@ -222,7 +222,7 @@ index 94481a4..cb38a86 100644
  
    NodHandle* discHandle;
 diff --git a/lib/gfx/frame.cpp b/lib/gfx/frame.cpp
-index e005a60..0933f06 100644
+index e005a60..7e8dc31 100644
 --- a/lib/gfx/frame.cpp
 +++ b/lib/gfx/frame.cpp
 @@ -5,6 +5,7 @@
@@ -277,21 +277,30 @@ index e005a60..0933f06 100644
  }
  
  void pace_frame_start() {
-@@ -220,6 +242,13 @@ void map_staging_buffer(size_t slot, bool releaseSlotOnCompletion = false) {
+@@ -220,6 +242,22 @@ void map_staging_buffer(size_t slot, bool releaseSlotOnCompletion = false) {
      return;
    }
  
 +#ifdef __EMSCRIPTEN__
-+  g_mappingStates[slot].store(BufferMapState::Mapped, std::memory_order_release);
-+  if (releaseSlotOnCompletion) {
-+    g_stagingSlots.release(slot);
-+  }
++  // Nothing to map (see g_stagingMemory), but the slot is only ready once the GPU has finished the
++  // work submitted so far, including the frame that used it. Without that wait, nothing would hold
++  // the CPU back from a slower GPU, and the browser would queue frames without limit.
++  g_queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
++                              [slot, releaseSlotOnCompletion](wgpu::QueueWorkDoneStatus status, wgpu::StringView) {
++                                g_mappingStates[slot].store(status == wgpu::QueueWorkDoneStatus::Success
++                                                                ? BufferMapState::Mapped
++                                                                : BufferMapState::Unmapped,
++                                                            std::memory_order_release);
++                                if (releaseSlotOnCompletion) {
++                                  g_stagingSlots.release(slot);
++                                }
++                              });
 +  return;
 +#endif
    g_stagingBuffers[slot].MapAsync(
        wgpu::MapMode::Write, 0, StagingBufferSize, wgpu::CallbackMode::AllowSpontaneous,
        [slot, releaseSlotOnCompletion](wgpu::MapAsyncStatus status, wgpu::StringView message) {
-@@ -239,6 +268,27 @@ void map_staging_buffer(size_t slot, bool releaseSlotOnCompletion = false) {
+@@ -239,6 +277,27 @@ void map_staging_buffer(size_t slot, bool releaseSlotOnCompletion = false) {
          }
        });
  }
@@ -319,7 +328,7 @@ index e005a60..0933f06 100644
  } // namespace
  
  namespace detail {
-@@ -428,9 +478,17 @@ void initialize() {
+@@ -428,9 +487,17 @@ void initialize() {
                 "Shared Storage Buffer");
    for (size_t i = 0; i < g_stagingBuffers.size(); ++i) {
      const auto label = fmt::format("Staging Buffer {}", i);
@@ -339,7 +348,7 @@ index e005a60..0933f06 100644
    for (auto& state : g_mappingStates) {
      state.store(BufferMapState::Unmapped, std::memory_order_release);
    }
-@@ -561,6 +619,9 @@ void shutdown() {
+@@ -561,6 +628,9 @@ void shutdown() {
    g_resources.indexBuffer = {};
    g_resources.storageBuffer = {};
    g_stagingBuffers.fill({});
@@ -349,7 +358,7 @@ index e005a60..0933f06 100644
    for (auto& packet : g_framePackets) {
      packet = {};
    }
-@@ -641,7 +702,12 @@ bool begin_frame() {
+@@ -641,7 +711,12 @@ bool begin_frame() {
      if (size <= 0) {
        return;
      }
@@ -362,7 +371,7 @@ index e005a60..0933f06 100644
      bufferOffset += size;
    };
    mapBuffer(frame.verts, VertexBufferSize);
-@@ -681,7 +747,11 @@ void end_frame(EndFrameCallback callback) {
+@@ -681,7 +756,11 @@ void end_frame(EndFrameCallback callback) {
    const size_t stagingSlot = frame.stagingBuffer;
    render_worker::enqueue_end_frame(frameId, [frameSlot, stagingSlot, callback = std::move(callback)]() mutable {
      auto& packet = g_framePackets[frameSlot];
@@ -375,17 +384,18 @@ index e005a60..0933f06 100644
      auto encoder = std::move(packet.encoder);
      const auto stats = packet.stats;
 diff --git a/lib/gfx/frame.hpp b/lib/gfx/frame.hpp
-index 0b86ffe..d25b8ba 100644
+index 0b86ffe..9a6808e 100644
 --- a/lib/gfx/frame.hpp
 +++ b/lib/gfx/frame.hpp
-@@ -8,7 +8,13 @@
+@@ -8,7 +8,14 @@
  namespace aurora::gfx::detail {
  
  inline constexpr size_t FrameSlotCount = 2;
 +#ifdef __EMSCRIPTEN__
-+// The web fills the staging buffer with Queue::WriteBuffer when a frame ends (frame.cpp), which the
-+// queue orders after the previous frame's reads, so one is enough.
-+inline constexpr size_t StagingBufferCount = 1;
++// The web fills staging buffers with Queue::WriteBuffer when a frame ends (frame.cpp), so none are
++// mapped; a slot frees up when the GPU finishes its frame. Two let the CPU record one frame while
++// the GPU draws the previous one, and no further ahead.
++inline constexpr size_t StagingBufferCount = FrameSlotCount;
 +#else
  inline constexpr size_t StagingBufferCount = FrameSlotCount + 3;
 +#endif
