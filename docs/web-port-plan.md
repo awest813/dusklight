@@ -725,6 +725,27 @@ Measured in headless Chromium with the synthetic disc.
   hasn't granted it, says that the browser may clear saves when the disk runs low.
 - Running out of memory now comes with an explanation on the error screen.
 
+### Saving and loading
+
+`platforms/web/tests/web-card` saves the way the game does (`mDoMemCdRWm_Store`: the header, then
+the two save sectors, each read back) through aurora's real memory card code on OPFS. It then
+loads the save in a new page, as after a reload, and deletes it, for both save file types.
+
+- **GCI Folder** (the default): mounting takes about 15 ms and a save about 35 ms.
+- **Card Image** saves took 3 s, and creating the card 1.7 s:
+  - Every write copies the whole 16 MiB image to a temporary file, for crash safety, in 64 KiB
+    chunks. Each chunk is a round trip to the OPFS worker.
+  - Creating the card wrote its 2,043 empty blocks one at a time.
+  - Both now go in 1 MiB pieces (aurora patch: `io.cpp`, `CardRawFile.cpp`), which helps native
+    builds too. Saving takes about 0.5 s, and creating the card 0.13 s.
+- **Writes are atomic**, as on native: a tab closed mid-save leaves the old save or the new one,
+  and at worst a temporary file, which backups leave out.
+- **Restoring a backup** now reads any zip of it: the page's own, or one unpacked and zipped again
+  (deflated, inside another folder, with directory entries or macOS extras). It only writes
+  Dusklight's data folder, and checks every file's CRC before writing any.
+- **Moving saves between the desktop version and the browser** works through the Save Manager's
+  import and export (`.gci`, `.dusksave`, Dolphin `.raw`), documented in [web.md](web.md).
+
 ### Ready for players
 
 [web.md](web.md) is the player and host guide. For a first public build:

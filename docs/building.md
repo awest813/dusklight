@@ -253,7 +253,8 @@ node platforms/web/tests/shell-test.mjs
 web audio output in headless Chromium. `node platforms/web/tests/web-storage/run.mjs` checks that
 the file operations behind saves and settings work on the browser's storage and survive a reload.
 After building, `node platforms/web/tests/web-file-select/run.mjs build/web` checks the game's
-file dialogs (importing and exporting saves) in the browser.
+file dialogs (importing and exporting saves) in the browser, and
+`node platforms/web/tests/web-card/run.mjs build/web` saves and loads through the memory card.
 
 After building, `platforms/web/tests/run-page.mjs build/web` checks that the prelaunch screen renders
 in headless Chromium; with `--disc <image> --expect-log <regex>` it boots a disc image, such as the

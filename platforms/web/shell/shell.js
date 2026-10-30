@@ -243,12 +243,17 @@ function crc32(bytes) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-// Everything the game keeps in OPFS except the stored disc and its logs (up to 100 MB, and not
-// something to restore).
-async function* walk(dir, prefix = '') {
+// The game's data folder in OPFS (SDL's preference path, /libsdl/TwilitRealm/Dusklight), which is
+// what backups hold.
+const DATA_ROOT = 'TwilitRealm';
+
+// Logs (up to 100 MB, and nothing to restore) and the temporary files of interrupted writes
+// (aurora's "<name>.tmp-<n>", Dusklight's ".config.json.tmp" and "<name>.tmp") stay out of backups.
+const leftOut = (name, kind) => (kind === 'directory' ? name === 'logs' : /\.tmp(-\d+)?$/.test(name));
+
+async function* walk(dir, prefix) {
   for await (const [name, handle] of dir.entries()) {
-    if (!prefix && name === DISC_DIR) continue;
-    if (handle.kind === 'directory' && name === 'logs') continue;
+    if (leftOut(name, handle.kind)) continue;
     const path = prefix + name;
     if (handle.kind === 'directory') {
       yield* walk(handle, `${path}/`);
@@ -263,7 +268,13 @@ async function exportSaves() {
   const central = [];
   let offset = 0;
   const encoder = new TextEncoder();
-  for await (const [path, handle] of walk(await navigator.storage.getDirectory())) {
+  let dataRoot;
+  try {
+    dataRoot = await (await navigator.storage.getDirectory()).getDirectoryHandle(DATA_ROOT);
+  } catch {
+    throw new Error('there are no saves or settings yet');
+  }
+  for await (const [path, handle] of walk(dataRoot, `${DATA_ROOT}/`)) {
     const data = new Uint8Array(await (await handle.getFile()).arrayBuffer());
     const name = encoder.encode(path);
     const crc = crc32(data);
@@ -301,29 +312,70 @@ async function exportSaves() {
   download(`dusklight-saves-${date}.zip`, new Blob([...parts, ...central, end], { type: 'application/zip' }));
 }
 
-async function importSaves(file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const view = new DataView(bytes.buffer);
-  const decoder = new TextDecoder();
-  const files = [];
-  for (let at = 0; at + 30 <= bytes.length && view.getUint32(at, true) === 0x04034b50;) {
-    const method = view.getUint16(at + 8, true);
-    const size = view.getUint32(at + 18, true);
-    const nameLength = view.getUint16(at + 26, true);
-    const extraLength = view.getUint16(at + 28, true);
-    const name = decoder.decode(bytes.subarray(at + 30, at + 30 + nameLength));
-    const start = at + 30 + nameLength + extraLength;
-    if (method !== 0 || (view.getUint16(at + 6, true) & 0x8) !== 0) {
-      throw new Error('This is not a Dusklight backup.');
+// Reads a zip's entries from its central directory: the page's own backups (stored), and the same
+// files zipped again by another tool (deflated, with directory entries or data descriptors).
+function readZip(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = -1;
+  for (let at = bytes.length - 22; at >= Math.max(0, bytes.length - 22 - 0xffff); --at) {
+    if (view.getUint32(at, true) === 0x06054b50) {
+      end = at;
+      break;
     }
-    const segments = name.split('/');
-    if (segments.some((s) => s === '' || s === '.' || s === '..') || segments[0] === DISC_DIR) {
-      throw new Error(`Unexpected path in backup: ${name}`);
-    }
-    files.push([segments, bytes.subarray(start, start + size)]);
-    at = start + size;
   }
-  if (files.length === 0) throw new Error('This is not a Dusklight backup.');
+  if (end < 0) return null;
+  const decoder = new TextDecoder();
+  const entries = [];
+  for (let i = 0, at = view.getUint32(end + 16, true); i < view.getUint16(end + 10, true); ++i) {
+    if (at + 46 > bytes.length || view.getUint32(at, true) !== 0x02014b50) return null;
+    const nameLength = view.getUint16(at + 28, true);
+    const local = view.getUint32(at + 42, true);
+    const compressedSize = view.getUint32(at + 20, true);
+    if (local + 30 > bytes.length || view.getUint32(local, true) !== 0x04034b50 || compressedSize === 0xffffffff) {
+      return null;
+    }
+    const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+    entries.push({
+      name: decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength)),
+      method: view.getUint16(at + 10, true),
+      crc: view.getUint32(at + 16, true),
+      data: bytes.subarray(start, start + compressedSize),
+    });
+    at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+  }
+  return entries;
+}
+
+async function unzipEntry(entry) {
+  if (entry.method === 0) return entry.data;
+  if (entry.method !== 8) throw new Error(`${entry.name} uses a compression this page can't read.`);
+  const stream = new Blob([entry.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+// Restores a backup made by exportSaves, also one that was unpacked and zipped again (its data
+// folder may then sit inside another folder). Only the game's data folder is restored, so another
+// zip can't put files elsewhere in this site's storage, and every file is checked before any is
+// written.
+async function importSaves(file) {
+  const entries = readZip(new Uint8Array(await file.arrayBuffer()));
+  if (!entries) throw new Error('This is not a zip file.');
+  const files = [];
+  for (const entry of entries) {
+    const segments = entry.name.split('/');
+    const root = segments.indexOf(DATA_ROOT);
+    if (entry.name.endsWith('/') || root < 0 || segments[0] === '__MACOSX') continue;
+    const path = segments.slice(root);
+    if (path.some((s) => s === '' || s === '.' || s === '..')) throw new Error(`Unexpected path in backup: ${entry.name}`);
+    if (path.slice(0, -1).some((s) => leftOut(s, 'directory')) || leftOut(path.at(-1), 'file') ||
+        path.at(-1) === '.DS_Store') {
+      continue;
+    }
+    const data = await unzipEntry(entry);
+    if (crc32(data) !== entry.crc) throw new Error(`${entry.name} is damaged in this backup.`);
+    files.push([path, data]);
+  }
+  if (files.length === 0) throw new Error('This zip has no Dusklight saves or settings.');
 
   const root = await navigator.storage.getDirectory();
   for (const [segments, data] of files) {

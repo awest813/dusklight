@@ -7,6 +7,7 @@
 // wasm build is needed: fake-module.js stands in for dusklight.js with the same contract the page
 // relies on (Module.wasmMemory, onRuntimeInitialized, _dusk_web_disc_channel, callMain), and reads
 // the disc from a worker exactly as a game thread does (src/dusk/web/disc.cpp).
+import { execFileSync } from 'node:child_process';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -249,6 +250,49 @@ try {
     if (restored === null) await new Promise((r) => setTimeout(r, 100));
   }
   check(restored === 'card-bytes', 'restore brings the saves back');
+
+  // Backups that went through other zip tools: unpacked and zipped again (deflated, inside another
+  // folder, with directory entries and macOS extras), a zip of something else, a damaged one.
+  {
+    const dialogs = [];
+    const recordDialog = (d) => dialogs.push(d.message());
+    page.on('dialog', recordDialog);
+    const makeZip = (name, script) => {
+      const zipFile = path.join(site, name);
+      execFileSync('python3', ['-c', `import sys, zipfile\nz = zipfile.ZipFile(sys.argv[1], 'w')\n${script}\nz.close()`, zipFile]);
+      return zipFile;
+    };
+    const restore = async (zipFile) => {
+      dialogs.length = 0;
+      await page.setInputFiles('#import-saves', zipFile);
+      for (let i = 0; i < 100 && dialogs.length < 2; ++i) await page.waitForTimeout(100);
+      return dialogs.at(-1) ?? '';
+    };
+    const rezipped = makeZip('rezipped.zip', [
+      "d = zipfile.ZIP_DEFLATED",
+      "z.writestr('saves/', b'')",
+      "z.writestr('saves/TwilitRealm/', b'')",
+      "z.writestr('saves/TwilitRealm/Dusklight/GC/USA/Card A/01-GZ2E-gczelda2.gci', b'gci' * 1000, d)",
+      "z.writestr('saves/TwilitRealm/Dusklight/.DS_Store', b'x', d)",
+      "z.writestr('saves/TwilitRealm/Dusklight/logs/dusklight.log', b'log', d)",
+      "z.writestr('saves/TwilitRealm/Dusklight/config.json.tmp-12', b'tmp', d)",
+      "z.writestr('__MACOSX/saves/._TwilitRealm', b'x', d)",
+    ].join('\n'));
+    check((await restore(rezipped)).includes('Restored 1 files'), 'a backup zipped again by another tool restores');
+    check(await page.evaluate(async () => {
+      let dir = await navigator.storage.getDirectory();
+      for (const name of ['TwilitRealm', 'Dusklight', 'GC', 'USA', 'Card A']) dir = await dir.getDirectoryHandle(name);
+      return (await (await dir.getFileHandle('01-GZ2E-gczelda2.gci')).getFile()).size;
+    }) === 3000, 'its save lands in the game\'s data folder');
+    const other = makeZip('other.zip', "z.writestr('photos/cat.jpg', b'meow')");
+    check((await restore(other)).includes('no Dusklight saves'), 'a zip of something else is refused');
+    const damagedFile = makeZip('damaged.zip', "z.writestr('TwilitRealm/Dusklight/config.json', b'{\"a\": 1}')");
+    const damaged = await readFile(damagedFile);
+    damaged[damaged.indexOf('{"a"') + 1] ^= 0xff;
+    await writeFile(damagedFile, damaged);
+    check((await restore(damagedFile)).includes('damaged'), 'a damaged backup is refused');
+    page.off('dialog', recordDialog);
+  }
 
   // The audio worklet plays the ring, counts underruns, and hands the space back.
   const audio = await page.evaluate(async () => {

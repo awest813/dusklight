@@ -69,6 +69,18 @@ on the main menu). **Import Save** opens the browser's file chooser, and exports
 your browser saves downloads. If you used a controller, the page may first ask you to click
 **Choose file…**, since browsers only open their file chooser after a click or key press.
 
+- **From the desktop version or Dolphin:** export the save there (a `.gci` or `.dusksave` file,
+  or a Dolphin memory card `.raw`), then use **Import Save** in the browser.
+- **To the desktop version:** use **Export** in the browser's Save Manager, then import the file
+  there.
+- **Save File Type:** keep the default, **GCI Folder**, in the browser. Saving takes a few
+  hundredths of a second, against about half a second with **Card Image**, since a card image
+  is copied whole on every write.
+
+A backup that was unpacked and zipped again (for example with Finder or Windows Explorer) can still
+be restored. Restore only reads Dusklight's own folder from the zip, and checks every file before
+writing any.
+
 Unless the browser has agreed to keep the site's data (the page tells you if it hasn't), it may
 also delete it by itself when your disk is nearly full. Bookmarking the page can help.
 
