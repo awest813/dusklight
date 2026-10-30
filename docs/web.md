@@ -26,7 +26,7 @@ Dusklight contains no game data. Your disc image is read in your browser and nev
    - **Keep a copy in this browser:** the disc is copied into the browser's private storage once,
      and you can play right away on later visits.
    - **Use this file for now:** nothing is copied, and you choose the file again next time.
-3. Click **Play**. The first start downloads about 14 MB, and the game may take a moment to load.
+3. Click **Play**. The first start downloads about 13 MB, and the game may take a moment to load.
 
 Click into the game once if you don't hear sound; browsers only start audio after you interact
 with the page.

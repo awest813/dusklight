@@ -1,7 +1,9 @@
 # Web port: audit and plan
 
-Status: plan accepted, implementation started. Decisions are recorded under
-[Decisions](#decisions); progress under [Progress](#progress).
+Status: implemented. The web build runs in headless Chromium with a data-free synthetic disc; it
+has not been tried with a real disc or a real GPU yet. Decisions are recorded under
+[Decisions](#decisions), progress under [Progress](#progress), and the player and host guide is
+[web.md](web.md).
 
 This document audits what stands between the current native build and one that runs in a browser
 (WebAssembly + WebGPU), and lays out a phased plan. File references are to this repo, to
@@ -552,6 +554,17 @@ SwiftShader:
   scene and keeps running. It waits on resources that a synthetic disc does not contain.
 - **Config, logs and the stored disc image** persist in OPFS across reloads.
 
+The sections below record each area as built and measured: [performance](#performance),
+[WebGPU](#webgpu), [memory and storage](#memory-and-storage), [saving and
+loading](#saving-and-loading), readiness for players and the game's own UI. CI builds the web
+target and runs, in headless Chromium:
+- the page against a stand-in module (`shell-test.mjs`);
+- the audio output, OPFS storage, file dialogs and memory card (`web-audio`, `web-storage`,
+  `web-file-select`, `web-card`);
+- the game itself, without a disc and with the synthetic disc (`run-page.mjs`).
+
+The ISO reader, disc channel and audio mixer also run natively under sanitizers.
+
 A real disc has not been tried; that is the next milestone.
 
 Fixed while getting there (see the commit history for details):
@@ -809,7 +822,8 @@ Checked by walking through the menus in a browser.
 
 ### Next
 
-- **Boot to the title screen from a real disc (Phase 4 exit).** Watch for:
+- **Boot to the title screen from a real disc (Phase 4 exit), on a real GPU.** Everything so far
+  ran on SwiftShader. Watch for:
   - more function-signature traps on code paths the synthetic disc doesn't reach;
   - pipeline compilation hitches in the GPU process: if they show, create pipelines with
     `createRenderPipelineAsync` (aurora already skips draws while a pipeline is pending);
@@ -820,3 +834,4 @@ Checked by walking through the menus in a browser.
 - **Wii discs and compressed formats**, if a threaded wasm build of nod becomes possible.
 - **The borealis HTTP backend over `fetch`,** for the mod catalog. CORS on twilitrealm.dev is
   needed.
+- **Firefox and Safari,** once they ship JSPI and WebGPU (the first release targets Chromium).
