@@ -107,6 +107,9 @@ void Mixer::run() {
 EM_ASYNC_JS(uint32_t, dusk_web_audio_start, (void* header, float* data, uint32_t frames, uint32_t channels,
                                               uint32_t preferredRate), {
   try {
+    // Pointers arrive as signed numbers; this keeps those above 2 GiB valid offsets.
+    header >>>= 0;
+    data >>>= 0;
     const memory = typeof wasmMemory !== 'undefined' ? wasmMemory : Module['wasmMemory'];
     let ctx;
     try {

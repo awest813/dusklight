@@ -798,10 +798,10 @@ index b3ae6cd..7112bf6 100644
  
 diff --git a/lib/webgpu/web_extensions.cpp b/lib/webgpu/web_extensions.cpp
 new file mode 100644
-index 0000000..871593f
+index 0000000..32e730d
 --- /dev/null
 +++ b/lib/webgpu/web_extensions.cpp
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,132 @@
 +#include "web_extensions.hpp"
 +#include "gpu.hpp"
 +
@@ -816,9 +816,12 @@ index 0000000..871593f
 +
 +// `WebGPU` is the emdawnwebgpu runtime: getJsObject maps a handle to its GPU* object, and
 +// importJs<Object> registers a JS object and returns a new handle that owns one reference.
++// Pointers arrive as signed numbers, so `>>>= 0` makes those above 2 GiB valid offsets (memory can
++// grow to 4 GiB).
 +
 +EM_JS(WGPUPipelineLayout, aurora_web_create_pipeline_layout,
 +      (WGPUDevice device, const WGPUBindGroupLayout* layouts, uint32_t layoutCount, uint32_t immediateSize), {
++  layouts >>>= 0;
 +  const bindGroupLayouts = [];
 +  for (let i = 0; i < layoutCount; ++i) {
 +    bindGroupLayouts.push(WebGPU.getJsObject(HEAPU32[(layouts >> 2) + i]));
@@ -865,6 +868,7 @@ index 0000000..871593f
 +
 +EM_JS(void, aurora_web_set_immediates,
 +      (WGPURenderPassEncoder pass, uint32_t offset, const void* data, uint32_t size), {
++  data >>>= 0;
 +  WebGPU.getJsObject(pass).setImmediates(offset, HEAPU8, data, size);
 +});
 +

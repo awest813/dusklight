@@ -77,10 +77,10 @@ index b9fb217..b096be3 100644
      std::string_view sourceLocation, std::string_view destinationLocation, bool atomic);
 diff --git a/src/file_select/web.cpp b/src/file_select/web.cpp
 new file mode 100644
-index 0000000..d2c16bd
+index 0000000..aca15db
 --- /dev/null
 +++ b/src/file_select/web.cpp
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,172 @@
 +// File selection in a browser (Emscripten builds with JSPI).
 +//
 +// Opening suspends the calling stack while the page asks the player for files, copies the chosen
@@ -131,13 +131,14 @@ index 0000000..d2c16bd
 +});
 +
 +// Copies chosen file `index` into a new allocation (*data, freed by the caller) and returns its
-+// name (also freed by the caller).
++// name (also freed by the caller). (Pointers arrive as signed numbers; `>>> 0` keeps those above
++// 2 GiB valid.)
 +EM_JS(char*, borealis_web_take_file, (int index, void** data, double* size), {
 +    const file = Module.borealisChosenFiles[index];
-+    const pointer = _malloc(Math.max(1, file.bytes.length));
++    const pointer = _malloc(Math.max(1, file.bytes.length)) >>> 0;
 +    HEAPU8.set(file.bytes, pointer);
-+    HEAPU32[data >> 2] = pointer;
-+    HEAPF64[size >> 3] = file.bytes.length;
++    HEAPU32[data >>> 2] = pointer;
++    HEAPF64[size >>> 3] = file.bytes.length;
 +    Module.borealisChosenFiles[index] = null;
 +    return stringToNewUTF8(file.name);
 +});
@@ -145,6 +146,7 @@ index 0000000..d2c16bd
 +EM_JS(void, borealis_web_release_files, (), { delete Module.borealisChosenFiles; });
 +
 +EM_JS(void, borealis_web_save_file, (const char* namePtr, const void* data, double size), {
++    data >>>= 0;
 +    // slice(): a Blob cannot be made from the module's shared memory.
 +    const blob = new Blob([HEAPU8.slice(data, data + size)]);
 +    const name = UTF8ToString(namePtr);

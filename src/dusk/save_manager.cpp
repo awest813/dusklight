@@ -547,21 +547,43 @@ ValueResult<std::vector<uint8_t>> read_current_gci(
 }
 
 // std::filesystem::rename for a directory. The web build's storage (WasmFS on OPFS) cannot move
-// directories, so there the directory is rebuilt at the new path from its moved files.
+// directories, so there the directory is rebuilt at the new path from its moved files. If a move
+// fails, the ones already made are undone first, so that `from` is left as it was.
 void rename_directory(const std::filesystem::path& from, const std::filesystem::path& to) {
 #ifdef __EMSCRIPTEN__
-    std::vector<std::filesystem::directory_entry> entries;
+    struct Entry {
+        std::filesystem::path name;
+        bool isDirectory;
+    };
+    std::vector<Entry> entries;
     for (const auto& entry : std::filesystem::directory_iterator(from)) {
-        entries.push_back(entry);
+        entries.push_back({entry.path().filename(), entry.is_directory()});
     }
-    std::filesystem::create_directory(to);
-    for (const auto& entry : entries) {
-        const auto target = to / entry.path().filename();
-        if (entry.is_directory()) {
-            rename_directory(entry.path(), target);
+    const auto move = [](const Entry& entry, const std::filesystem::path& source,
+                          const std::filesystem::path& target) {
+        if (entry.isDirectory) {
+            rename_directory(source / entry.name, target / entry.name);
         } else {
-            std::filesystem::rename(entry.path(), target);
+            std::filesystem::rename(source / entry.name, target / entry.name);
         }
+    };
+    std::filesystem::create_directory(to);
+    size_t moved = 0;
+    try {
+        for (; moved < entries.size(); ++moved) {
+            move(entries[moved], from, to);
+        }
+    } catch (...) {
+        while (moved > 0) {
+            try {
+                move(entries[--moved], to, from);
+            } catch (...) {
+                // Keep undoing the others.
+            }
+        }
+        std::error_code ec;
+        std::filesystem::remove(to, ec);
+        throw;
     }
     std::filesystem::remove(from);
 #else

@@ -65,18 +65,38 @@ std::vector<uint8_t> read_all(const fs::path& path) {
 
 // The web branch of rename_directory in src/dusk/save_manager.cpp.
 void rename_directory(const fs::path& from, const fs::path& to) {
-    std::vector<fs::directory_entry> entries;
+    struct Entry {
+        fs::path name;
+        bool isDirectory;
+    };
+    std::vector<Entry> entries;
     for (const auto& entry : fs::directory_iterator(from)) {
-        entries.push_back(entry);
+        entries.push_back({entry.path().filename(), entry.is_directory()});
     }
-    fs::create_directory(to);
-    for (const auto& entry : entries) {
-        const auto target = to / entry.path().filename();
-        if (entry.is_directory()) {
-            rename_directory(entry.path(), target);
+    const auto move = [](const Entry& entry, const fs::path& source, const fs::path& target) {
+        if (entry.isDirectory) {
+            rename_directory(source / entry.name, target / entry.name);
         } else {
-            fs::rename(entry.path(), target);
+            fs::rename(source / entry.name, target / entry.name);
         }
+    };
+    fs::create_directory(to);
+    size_t moved = 0;
+    try {
+        for (; moved < entries.size(); ++moved) {
+            move(entries[moved], from, to);
+        }
+    } catch (...) {
+        while (moved > 0) {
+            try {
+                move(entries[--moved], to, from);
+            } catch (...) {
+                // Keep undoing the others.
+            }
+        }
+        std::error_code ec;
+        fs::remove(to, ec);
+        throw;
     }
     fs::remove(from);
 }
@@ -167,6 +187,33 @@ void write_phase(const fs::path& root) {
     }
     fs::remove_all(previous, ec);
     check(!ec && !fs::exists(previous), "remove_all");
+
+    // A move that fails partway (here, a file held open, which OPFS won't move) is undone.
+    {
+        const fs::path held = root / "held";
+        fs::create_directories(held / "nested", ec);
+        check(write_text(held / "a", "a") && write_text(held / "nested" / "b", "b") && write_text(held / "z", "z"),
+              "write a directory to move");
+        FILE* open = std::fopen((held / "z").c_str(), "r+b");
+        bool threw = false;
+        try {
+            rename_directory(held, root / "held.moved");
+        } catch (const fs::filesystem_error&) {
+            threw = true;
+        }
+        if (open != nullptr) {
+            std::fclose(open);
+        }
+        if (threw) {
+            check(read_text(held / "a") == "a" && read_text(held / "nested" / "b") == "b" &&
+                      read_text(held / "z") == "z" && !fs::exists(root / "held.moved"),
+                  "a failed directory move leaves the directory as it was");
+        } else {
+            std::printf("note: OPFS moved a file held open; the undo path was not exercised\n");
+            fs::remove_all(root / "held.moved", ec);
+        }
+        fs::remove_all(held, ec);
+    }
 
     // Something to delete in the next phase.
     fs::create_directories(root / "doomed" / "nested", ec);

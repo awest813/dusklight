@@ -458,7 +458,8 @@ async function start(source) {
     worker.onmessage = ({ data }) => (data.type === 'ready' ? resolve(data) : reject(new Error(data.message)));
     worker.onerror = (e) => reject(new Error(e.message));
   });
-  worker.postMessage({ memory, channel: Module._dusk_web_disc_channel(), source });
+  // (>>> 0: an address above 2 GiB comes back as a negative number.)
+  worker.postMessage({ memory, channel: Module._dusk_web_disc_channel() >>> 0, source });
   await attached;
 
   const name = source.kind === 'opfs' ? source.name : source.file.name;
@@ -509,6 +510,15 @@ function showError(message) {
 }
 
 async function pick(file) {
+  try {
+    await pickChecked(file);
+  } catch (e) {
+    // Unreadable: a folder, a file on a drive that went away, a cloud placeholder...
+    showError(`Couldn't read ${file.name}: ${e.message}`);
+  }
+}
+
+async function pickChecked(file) {
   showError(null);
   $('picked').hidden = true;
   const problem = await checkImage(file);
@@ -534,26 +544,33 @@ async function pick(file) {
 }
 
 async function playPicked() {
+  const file = pickedFile; // what was picked when Play was clicked, whatever is picked meanwhile
   const storage = document.querySelector('input[name=storage]:checked').value;
   if (storage === 'session') {
-    await start({ kind: 'file', file: pickedFile });
+    await start({ kind: 'file', file });
     return;
   }
+  // The copy replaces the stored disc, and nothing else on this screen may start meanwhile.
+  const locked = [$('drop'), $('stored'), $('picked')];
+  for (const element of locked) element.inert = true;
+  $('stored').hidden = true;
   $('play-picked').disabled = true;
   const progress = $('progress');
   progress.hidden = false;
   try {
-    await copyIntoBrowser(pickedFile, (fraction) => {
+    await copyIntoBrowser(file, (fraction) => {
       progress.querySelector('progress').value = fraction;
       progress.querySelector('span').textContent = `Copying… ${Math.floor(fraction * 100)}%`;
     });
   } catch (e) {
+    for (const element of locked) element.inert = false;
+    $('stored').hidden = !(await storedDisc()); // still there if it couldn't be removed
     $('play-picked').disabled = false;
     progress.hidden = true;
     showError(`Couldn't copy the disc image into the browser: ${e.message}`);
     return;
   }
-  await start({ kind: 'opfs', dir: [DISC_DIR], name: pickedFile.name });
+  await start({ kind: 'opfs', dir: [DISC_DIR], name: file.name });
 }
 
 // Registers coi-sw.js and reloads once, on hosts that don't send the isolation headers. Returns
@@ -636,6 +653,9 @@ async function setup() {
   }
 
   $('file').onchange = (e) => e.target.files[0] && pick(e.target.files[0]);
+  // A file dropped anywhere but the drop area would otherwise replace this page.
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
   const drop = $('drop');
   drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
   drop.ondragleave = () => drop.classList.remove('over');

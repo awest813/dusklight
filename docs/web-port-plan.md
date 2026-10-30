@@ -811,6 +811,24 @@ Checked by walking through the menus in a browser.
   - "Restore Default Controls" restores it for a keyboard port.
   - A controller on port 1 works alongside it (aurora combines both).
 
+### Final audit
+
+- **A from-scratch build** of the branch, with fresh submodules at their pinned commits and the
+  patches applied by configure, builds, renders the prelaunch screen and boots the synthetic disc.
+- **An independent review** of the web code found four problems, all fixed:
+  - **The setup screen stayed live during a disc copy.** Picking another disc meanwhile started the
+    wrong one. A failed copy still offered the stored disc it had already removed. The screen is
+    now locked while copying, and the disc that starts is the one Play was clicked for.
+  - **An unreadable picked file** (a folder, a disconnected drive) showed the fatal overlay; it now
+    shows an error on the page. A file dropped outside the drop area no longer replaces the page.
+  - **Pointers above 2 GiB** reached JS as negative numbers. Memory can grow to 4 GiB, though about
+    1 GiB is used today. Every hand-written JS boundary now converts them (`>>> 0`): aurora's WebGPU
+    helpers, the file dialogs, the audio ring and the disc channel.
+  - **The web directory move for saves' mod data** could stop halfway and leave files split between
+    two folders. It now undoes the moves already made, which `web-storage` checks.
+- The review found no problems in `serve.mjs` path handling, zip restore, the disc channel, the
+  audio ring, the staging buffer, `coi-sw.js` or the single-instance and leave flows.
+
 ### Found along the way
 
 - After a reload, the previous page's disc worker can still hold the OPFS access handle. The new
