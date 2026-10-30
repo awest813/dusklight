@@ -356,6 +356,11 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/web-storage/run.mjs
 
+      - name: Test the game's file dialogs in headless Chromium
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/web-file-select/run.mjs build/web
+
       - name: Smoke test in headless Chromium (no disc, prelaunch screen)
         run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/run-page.mjs build/web
 

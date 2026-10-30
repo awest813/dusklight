@@ -138,6 +138,27 @@ try {
     await page.waitForSelector('#disc:not([hidden])');
   }
 
+  // The game's file dialogs: when the browser refuses to open its chooser (no recent click or key
+  // press, as after a gamepad button), the page asks for a click. (Started from a timer, and waited
+  // for without polling: Playwright's calls into the page count as clicks for a few seconds.)
+  for (const proceed of [true, false]) {
+    await page.evaluate(() => setTimeout(() => {
+      window.chooseResult = borealisFileSelect.open({ accept: '.gci', multiple: false }).then((files) => files.map((f) => f.name));
+    }, 6000));
+    await page.waitForTimeout(6500);
+    check(await page.isVisible('#choose'), 'a refused file chooser makes the page ask for a click');
+    if (proceed) {
+      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#choose-file')]);
+      await chooser.setFiles({ name: 'Link.gci', mimeType: 'application/octet-stream', buffer: Buffer.from('save') });
+      check(JSON.stringify(await page.evaluate(() => window.chooseResult)) === '["Link.gci"]',
+        'the chooser opens after that click');
+    } else {
+      await page.click('#choose-cancel');
+      check(JSON.stringify(await page.evaluate(() => window.chooseResult)) === '[]', 'and can be canceled');
+    }
+    check(await page.isHidden('#choose'), 'the prompt closes');
+  }
+
   // Image checks.
   const verdict = (bytes) => page.evaluate(async (b) =>
     window.duskShell.checkImage(new File([new Uint8Array(b)], 'x.iso')), [...bytes.subarray(0, 0x1000)]);

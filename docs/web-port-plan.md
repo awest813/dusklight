@@ -743,6 +743,34 @@ Measured in headless Chromium with the synthetic disc.
   shows the build version and a not-affiliated notice. Page edits reach the build folder on every
   build, not only when the module relinks.
 
+### In the game's own UI
+
+Checked by walking through the menus in a browser.
+
+- **File dialogs work.** Importing and exporting saves (the Save Manager) and loading state packs
+  went through SDL's file dialogs, which have no browser backend, so each such button failed.
+  - borealis has a web backend now (`src/file_select/web.cpp` in the borealis patch). Opening
+    suspends the game (JSPI) while the browser's file chooser is up, then copies the chosen files
+    into the in-memory filesystem. Exporting becomes a download. Folders can't be chosen, so the
+    settings that need one hide themselves.
+  - Browsers only open a file chooser right after a click or key press, and a gamepad button
+    doesn't count. The page then asks for a click (`borealisFileSelect` in `shell.js`).
+  - `platforms/web/tests/web-file-select` covers it.
+- **Settings that don't apply are hidden or disabled:**
+  - Hidden: Data Folder, Graphics Backend (only WebGPU), VSync (browsers present in step with the
+    display), Restore Default Window Size, and Check for Updates.
+  - Disabled, as on mobile: Remember Window Size, and LiveSplit (it needs a TCP socket).
+- **Fullscreen:**
+  - Toggle Fullscreen now switches the page's actual state (Esc can leave it at any time), and is
+    neither saved nor restored, since a page can't enter fullscreen by itself.
+  - F11 is left to the browser.
+- **The controller warning** says to press a button on the controller, since browsers only report
+  one after that.
+- The page shows download progress while loading.
+- **Open question for the Dusklight team:** there are no default keyboard bindings, so a
+  keyboard-only player must bind every button before playing (on native too). For a browser
+  release, a default layout would remove most of the first-run friction.
+
 ### Found along the way
 
 - After a reload, the previous page's disc worker can still hold the OPFS access handle. The new

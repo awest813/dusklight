@@ -364,6 +364,12 @@ function loadRuntime() {
         // thread can arrive without its status.)
         onExit: (status) => (!status ? leave() : showFatal(`Exited with status ${status}`)),
         onRuntimeInitialized: resolve,
+        // Emscripten reports the download of dusklight.data as "Downloading data... (done/total)".
+        setStatus: (text) => {
+          const progress = /\((\d+)\/(\d+)\)/.exec(text);
+          $('loading').textContent = progress && Number(progress[2]) > 0 ?
+            `Loading… ${Math.floor((100 * progress[1]) / progress[2])}%` : 'Loading…';
+        },
       };
     });
     await loadScript(config.script);
@@ -408,6 +414,38 @@ async function start(source) {
   $('loading').hidden = true;
   await Module.callMain(args);
 }
+
+// --- The game's file dialogs ------------------------------------------------------------------
+
+// borealis::file_select (extern/borealis/src/file_select/web.cpp) asks the page for files when the
+// game imports something, such as a save. A browser only opens its file chooser right after a click
+// or key press, and a gamepad button doesn't count, so when it refuses, the page asks for a click.
+globalThis.borealisFileSelect = {
+  async open({ accept, multiple }) {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept, multiple });
+    const chosen = new Promise((resolve) => {
+      input.addEventListener('change', () => resolve([...input.files]), { once: true });
+      input.addEventListener('cancel', () => resolve([]), { once: true });
+    });
+    try {
+      input.showPicker();
+    } catch (e) {
+      if (e.name !== 'NotAllowedError') throw e;
+      $('choose').hidden = false;
+      $('choose-file').focus();
+      const proceed = await new Promise((resolve) => {
+        $('choose-file').onclick = () => resolve(true);
+        $('choose-cancel').onclick = () => resolve(false);
+      });
+      $('choose').hidden = true;
+      if (!proceed) return [];
+      input.showPicker(); // within the click's activation
+    }
+    const files = await chosen;
+    $('canvas').focus();
+    return files;
+  },
+};
 
 // --- Setup screen -----------------------------------------------------------------------------
 

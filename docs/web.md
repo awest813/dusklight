@@ -34,6 +34,16 @@ with the page.
 To use a different disc later, choose **Select disc image** in the game's menu, or remove the stored
 disc on the page.
 
+## Controls
+
+- **Controllers:** connect one, then **press any button on it**. Browsers only report a controller
+  once it has been used on the page.
+- **Keyboard:** Dusklight has no default keyboard layout. In **Settings → Input → Configure
+  Inputs**, choose **Keyboard** for Port 1 and assign the keys you want.
+- **F1** opens the Dusklight menu (settings, quit). The menus also work with the mouse.
+- **Fullscreen:** press **F11**, or use **Toggle Fullscreen** in **Settings → Video**. **Esc**
+  leaves it. The game starts in a window each visit.
+
 ## Saves and settings
 
 Saves and settings are kept in your browser's storage for this site, so they are still there next
@@ -41,6 +51,11 @@ time. Clearing the site's data (or your browser's history, with "cookies and sit
 them, so **back them up** with the page's **Back up** button. **Restore a backup** brings a backup
 back into this browser, for example after clearing data or on another computer. Backups hold your
 saves and settings, not the disc image or logs.
+
+Individual saves can also be moved in and out with the game's **Save Manager** (Settings → Prelaunch
+on the main menu). **Import Save** opens the browser's file chooser, and exports are saved where
+your browser saves downloads. If you used a controller, the page may first ask you to click
+**Choose file…**, since browsers only open their file chooser after a click or key press.
 
 Unless the browser has agreed to keep the site's data (the page tells you if it hasn't), it may
 also delete it by itself when your disk is nearly full. Bookmarking the page can help.

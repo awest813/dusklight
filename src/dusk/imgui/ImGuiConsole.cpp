@@ -268,7 +268,9 @@ namespace dusk {
 
         UpdateSettings();
 
-        if (ImGui::IsKeyPressed(ImGuiKey_F11)) {
+        // In a browser, F11 is the browser's own fullscreen, which also fills the screen with the
+        // game.
+        if (!IsWeb && ImGui::IsKeyPressed(ImGuiKey_F11)) {
             getSettings().video.enableFullscreen.setValue(!getSettings().video.enableFullscreen);
             VISetWindowFullscreen(getSettings().video.enableFullscreen);
             config::save();

@@ -270,7 +270,8 @@ void main01(void) {
                 dusk::g_imguiConsole.HandleSDLEvent(event->sdl);
                 break;
             case AURORA_WINDOW_RESIZED:
-                if (dusk::getSettings().video.rememberWindowSize && !dusk::getSettings().video.enableFullscreen) {
+                if (!dusk::IsWeb && dusk::getSettings().video.rememberWindowSize &&
+                    !dusk::getSettings().video.enableFullscreen) {
                     dusk::getSettings().video.lastWindowWidth.setValue(event->windowSize.width);
                     dusk::getSettings().video.lastWindowHeight.setValue(event->windowSize.height);
                     dusk::config::save();
@@ -706,7 +707,12 @@ int game_main(int argc, char* argv[]) {
         config.resourcesPath = DUSK_ASSET_DIR;
 #endif
         config.vsync = dusk::getSettings().video.enableVsync;
+#ifdef __EMSCRIPTEN__
+        // A page can't go fullscreen on its own (settings.cpp toggles it per visit).
+        config.startFullscreen = false;
+#else
         config.startFullscreen = dusk::getSettings().video.enableFullscreen;
+#endif
         config.windowPosX = -1;
         config.windowPosY = -1;
 

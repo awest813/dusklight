@@ -34,6 +34,7 @@
 #endif
 #include <fmt/format.h>
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_video.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -618,6 +619,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                     }
                     pane.add_rml("<br/>Changes require a restart.");
                 });
+#ifndef __EMSCRIPTEN__ // a browser only has WebGPU
             leftPane.register_control(
                 leftPane.add_select_button({
                     .key = "Graphics Backend",
@@ -641,6 +643,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                     }
                     pane.add_rml("<br/>Changes require a restart.");
                 });
+#endif
             leftPane.register_control(
                 leftPane.add_select_button({
                     .key = "Save File Type",
@@ -683,11 +686,20 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
 
         leftPane.register_control(leftPane.add_button("Toggle Fullscreen").on_pressed([] {
             mDoAud_seStartMenu(kSoundItemChange);
+#ifdef __EMSCRIPTEN__
+            // In a browser, fullscreen belongs to the page: the player can leave it at any time
+            // (Esc), and it can't be entered without a click or key press, so toggle what the
+            // window is now and don't remember it.
+            VISetWindowFullscreen(
+                (SDL_GetWindowFlags(aurora::window::get_sdl_window()) & SDL_WINDOW_FULLSCREEN) == 0);
+#else
             getSettings().video.enableFullscreen.setValue(!getSettings().video.enableFullscreen);
             VISetWindowFullscreen(getSettings().video.enableFullscreen);
             config::save();
+#endif
         }),
             rightPane, [](Pane& pane) { pane.clear(); });
+#ifndef __EMSCRIPTEN__ // the page sizes the game's canvas
         leftPane.register_control(leftPane.add_button("Restore Default Window Size").on_pressed([] {
             mDoAud_seStartMenu(kSoundItemChange);
             getSettings().video.enableFullscreen.setValue(false);
@@ -696,12 +708,14 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             VICenterWindow();
         }),
             rightPane, [](Pane& pane) { pane.clear(); });
+        // Browsers always present in step with the display.
         config_bool_select(leftPane, rightPane, getSettings().video.enableVsync,
             {
                 .key = "Enable VSync",
                 .helpText = "Synchronizes the frame rate to your monitor's refresh rate.",
                 .onChange = [](bool value) { aurora_enable_vsync(value); },
             });
+#endif
         config_bool_select(leftPane, rightPane, getSettings().video.lockAspectRatio,
             {
                 .key = "Lock 4:3 Aspect Ratio",
@@ -782,7 +796,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                             config::save();
                         }
                     },
-                .isDisabled = [] { return IsMobile; },
+                .isDisabled = [] { return IsMobile || IsWeb; },
             });
 
         config_int_select(leftPane, rightPane, getSettings().video.uiScale,
@@ -1337,7 +1351,8 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                             speedrun::disconnectLiveSplit();
                         }
                     },
-                .isDisabled = [] { return IsMobile || !speedrun::isActive(); },
+                // LiveSplit's server is a TCP socket, which a browser cannot open.
+                .isDisabled = [] { return IsMobile || IsWeb || !speedrun::isActive(); },
             });
         config_bool_select(leftPane, rightPane, getSettings().game.showSpeedrunRTATimer,
             {
@@ -1585,12 +1600,14 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .key = "Show Shader Compilation",
                 .helpText = "Show an overlay when shaders are being compiled for your hardware.",
             });
+#ifndef __EMSCRIPTEN__ // the page is always the deployed version
         config_bool_select(leftPane, rightPane, getSettings().backend.checkForUpdates,
             {
                 .key = "Check for Dusklight Updates",
                 .helpText = "Checks GitHub releases for a new Dusklight version on startup.<br/><br/>"
                             "No personal information is transmitted or collected.",
             });
+#endif
 #if BOREALIS_HAS_DISCORD
         config_bool_select(leftPane, rightPane, getSettings().game.enableDiscordPresence,
             {

@@ -133,7 +133,12 @@ Rml::Element* create_controller_warning(Rml::Element* parent) {
 
     auto* message = append(elem, "message");
     auto* content = append(message, "toast-message-text");
+#ifdef __EMSCRIPTEN__
+    // Browsers only report a connected controller once one of its buttons is pressed.
+    append_text(content, "Press a button on your controller, or configure ");
+#else
     append_text(content, "Configure ");
+#endif
     append_text(append(content, "b"), "Port 1");
     append_text(content, " in Settings.");
 

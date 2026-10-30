@@ -31,4 +31,10 @@ inline constexpr bool IsMobile = true;
 #else
 inline constexpr bool IsMobile = false;
 #endif
+
+#ifdef __EMSCRIPTEN__
+inline constexpr bool IsWeb = true;
+#else
+inline constexpr bool IsWeb = false;
+#endif
 }  // namespace dusk

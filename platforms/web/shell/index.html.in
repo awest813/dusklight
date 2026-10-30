@@ -82,6 +82,15 @@
   </footer>
 </main>
 
+<div id="choose" hidden role="dialog" aria-labelledby="choose-title">
+  <h2 id="choose-title">Choose a file</h2>
+  <p>The game wants to open a file from this computer.</p>
+  <div class="actions">
+    <button id="choose-cancel">Cancel</button>
+    <button id="choose-file" class="primary">Choose file…</button>
+  </div>
+</div>
+
 <div id="fatal" hidden role="alertdialog" aria-labelledby="fatal-title">
   <h2 id="fatal-title">Dusklight stopped</h2>
   <p id="fatal-hint" hidden></p>

@@ -252,6 +252,8 @@ node platforms/web/tests/shell-test.mjs
 `node platforms/web/tests/web-audio/run.mjs` (with Emscripten activated) plays audio through the
 web audio output in headless Chromium. `node platforms/web/tests/web-storage/run.mjs` checks that
 the file operations behind saves and settings work on the browser's storage and survive a reload.
+After building, `node platforms/web/tests/web-file-select/run.mjs build/web` checks the game's
+file dialogs (importing and exporting saves) in the browser.
 
 After building, `platforms/web/tests/run-page.mjs build/web` checks that the prelaunch screen renders
 in headless Chromium; with `--disc <image> --expect-log <regex>` it boots a disc image, such as the
