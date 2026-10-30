@@ -93,6 +93,7 @@
 #include <borealis/version.h>
 #ifdef __EMSCRIPTEN__
 #include "dusk/web/disc.hpp"
+#include "dusk/web/keyboard.hpp"
 #endif
 #include <cxxopts.hpp>
 #include <dolphin/dvd.h>
@@ -208,6 +209,10 @@ void main01(void) {
 
     // 1. Setup
     mDoMch_Create();
+#ifdef __EMSCRIPTEN__
+    // After PADInit (in mDoMch_Create), which loads the saved keyboard bindings.
+    dusk::web::use_default_keyboard_layout();
+#endif
     mDoGph_Create();
     mDoCPd_c::create();
 

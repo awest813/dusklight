@@ -38,8 +38,20 @@ disc on the page.
 
 - **Controllers:** connect one, then **press any button on it**. Browsers only report a controller
   once it has been used on the page.
-- **Keyboard:** Dusklight has no default keyboard layout. In **Settings → Input → Configure
-  Inputs**, choose **Keyboard** for Port 1 and assign the keys you want.
+- **Keyboard:** works from the start, as a GameCube controller on Port 1:
+
+  | GameCube        | Keys              | GameCube | Keys       |
+  | --------------- | ----------------- | -------- | ---------- |
+  | Control stick   | W A S D           | A        | Space      |
+  | C-stick         | Arrow keys        | B        | E          |
+  | L               | Left Shift        | X        | Q          |
+  | R               | C                 | Y        | F          |
+  | Z               | Z                 | Start    | Enter      |
+  | D-pad           | 1 2 3 4 (up, down, left, right) |  |      |
+
+  Change it in **Settings → Input → Configure Inputs**; **Restore Default Controls** brings it
+  back. A controller on Port 1 works alongside it. The layout avoids Ctrl, Alt and Cmd, since
+  shortcuts such as Ctrl+W would close the tab.
 - **F1** opens the Dusklight menu (settings, quit). The menus also work with the mouse.
 - **Fullscreen:** press **F11**, or use **Toggle Fullscreen** in **Settings → Video**. **Esc**
   leaves it. The game starts in a window each visit.

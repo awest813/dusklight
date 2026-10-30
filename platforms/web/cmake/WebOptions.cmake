@@ -80,6 +80,7 @@ function(dusk_configure_web_target target)
     target_sources(${target} PRIVATE
             "${CMAKE_SOURCE_DIR}/src/dusk/web/audio.cpp"
             "${CMAKE_SOURCE_DIR}/src/dusk/web/disc.cpp"
+            "${CMAKE_SOURCE_DIR}/src/dusk/web/keyboard.cpp"
             "${CMAKE_SOURCE_DIR}/src/dusk/web/platform.cpp"
     )
     set_target_properties(${target} PROPERTIES SUFFIX ".js")

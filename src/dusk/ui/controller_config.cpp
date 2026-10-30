@@ -16,6 +16,9 @@
 #include <vector>
 
 #include "dusk/action_bindings.h"
+#ifdef __EMSCRIPTEN__
+#include "dusk/web/keyboard.hpp"
+#endif
 #include "dusk/config.hpp"
 #include "dusk/gamepad_color.h"
 
@@ -381,6 +384,13 @@ void ControllerConfigWindow::build_port_tab(Rml::Element* content, int port) {
     leftPane.register_control(leftPane.add_button("Restore Default Controls").on_pressed([this, port] {
             mDoAud_seStartMenu(kSoundClick);
             PADRestoreDefaultMapping(port);
+#ifdef __EMSCRIPTEN__
+            // The web build has a default keyboard layout (dusk/web/keyboard.hpp).
+            if (keyboard_active(port)) {
+                web::apply_keyboard_layout(static_cast<uint32_t>(port));
+                PADSerializeMappings();
+            }
+#endif
         }),
             rightPane, [](Pane& pane) {
                 pane.clear();

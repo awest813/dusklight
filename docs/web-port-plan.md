@@ -767,9 +767,15 @@ Checked by walking through the menus in a browser.
 - **The controller warning** says to press a button on the controller, since browsers only report
   one after that.
 - The page shows download progress while loading.
-- **Open question for the Dusklight team:** there are no default keyboard bindings, so a
-  keyboard-only player must bind every button before playing (on native too). For a browser
-  release, a default layout would remove most of the first-run friction.
+- **A default keyboard layout.** Dusklight has no keyboard defaults, on native either, so a
+  keyboard-only player had to bind every button before playing. Most browser players have only a
+  keyboard, so on a first run the web build turns on the keyboard for port 1 with a layout
+  (`src/dusk/web/keyboard.hpp`, listed in [web.md](web.md#controls)):
+  - WASD moves, the arrow keys move the camera, and Space, E, Q and F are A, B, X and Y.
+  - It leaves out Ctrl, Alt and Cmd, since Ctrl+W or Cmd+W closes the tab whatever the page does.
+  - It is saved like any other binding, so changes and a "None" choice stick.
+  - "Restore Default Controls" restores it for a keyboard port.
+  - A controller on port 1 works alongside it (aurora combines both).
 
 ### Found along the way
 
