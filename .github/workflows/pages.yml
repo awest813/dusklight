@@ -1,0 +1,100 @@
+name: Deploy web build to GitHub Pages
+
+# Builds the web target and publishes it as this repository's GitHub Pages site, for every push to
+# main (and on demand from the Actions tab). Pages can't send the COOP/COEP headers the game needs;
+# the page's service worker (platforms/web/shell/coi-sw.js) adds them. Needs Pages enabled with
+# "GitHub Actions" as its source (Settings > Pages); see docs/web.md.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - '*LICENSE'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; a newer push waits rather than cancelling one in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    env:
+      EMSDK_VERSION: 6.0.13
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # the page shows the version git describes
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install ninja-build
+
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSDK_VERSION"
+
+      - name: Install Playwright Chromium
+        run: |
+          # Pinned, as in build.yml: its Chromium decides which WebGPU features the tests see.
+          npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Configure CMake
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          cmake --preset web
+
+      - name: Build
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          cmake --build --preset web
+
+      - name: Stage the site
+        run: platforms/web/stage-site.sh build/web "$RUNNER_TEMP/pages/dusklight"
+
+      # The staged files, served as Pages serves them (under a path, without COOP/COEP headers).
+      - name: Smoke test the site (no disc, prelaunch screen)
+        run: |
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/run-page.mjs \
+            "$RUNNER_TEMP/pages/dusklight" --github-pages
+
+      - name: Smoke test the site (synthetic disc, game loop)
+        run: |
+          python3 platforms/web/tests/make-synthetic-disc.py "$RUNNER_TEMP/synthetic.iso"
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node platforms/web/tests/run-page.mjs \
+            "$RUNNER_TEMP/pages/dusklight" --github-pages --disc "$RUNNER_TEMP/synthetic.iso" \
+            --expect-log "Loaded game disc is GZ2E01" --expect-log "dScnLogo_c::create START"
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/pages/dusklight
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

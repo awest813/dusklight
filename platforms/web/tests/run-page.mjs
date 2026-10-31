@@ -2,11 +2,13 @@
 // that it renders its prelaunch screen.
 //
 //   node platforms/web/tests/run-page.mjs <build-dir> [--seconds 60] [--frame out.png]
-//        [--disc image.iso] [--expect-log <regex>]...
+//        [--disc image.iso] [--expect-log <regex>]... [--github-pages]
 //
 // With --disc, the image is attached through the page's picker ("use this file for now") instead
 // of starting without a disc. With --expect-log, the test passes once every pattern has matched a
 // line the game printed (whatever happens afterwards), instead of waiting for rendered frames.
+// With --github-pages, <build-dir> is a staged site (platforms/web/stage-site.sh), served the way
+// GitHub Pages serves a project site.
 //
 // The build directory is what `cmake --build --preset web` produces (index.html, dusklight.js,
 // .wasm, .data, ...). WebGPU runs on SwiftShader, so the game is started with
@@ -27,6 +29,7 @@ const buildDir = path.resolve(argv.shift() ?? '');
 let seconds = 60;
 let framePath = null;
 let discPath = null;
+let githubPages = false;
 const expectLogs = [];
 while (argv.length) {
   const flag = argv.shift();
@@ -34,15 +37,19 @@ while (argv.length) {
   else if (flag === '--frame') framePath = argv.shift();
   else if (flag === '--disc') discPath = path.resolve(argv.shift());
   else if (flag === '--expect-log') expectLogs.push(new RegExp(argv.shift()));
+  else if (flag === '--github-pages') githubPages = true;
   else {
     console.error(`run-page: unknown argument ${flag}`);
     process.exit(2);
   }
 }
 
-const server = createIsolatedServer(buildDir);
+// --github-pages serves the folder as GitHub Pages does a project site: under its own path, and
+// without the COOP/COEP headers, which coi-sw.js then has to add.
+const server = githubPages ?
+  createIsolatedServer(path.dirname(buildDir), { isolated: false }) : createIsolatedServer(buildDir);
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const base = `http://127.0.0.1:${server.address().port}/`;
+const base = `http://127.0.0.1:${server.address().port}/${githubPages ? `${path.basename(buildDir)}/` : ''}`;
 
 const browser = await launchChromium();
 let failure = null;

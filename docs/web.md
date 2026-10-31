@@ -119,3 +119,20 @@ Cross-Origin-Embedder-Policy: require-corp
 
 Serve over HTTPS (or `localhost`); browsers only allow these features on secure origins. Compression
 (gzip or Brotli) roughly halves the download, and most hosts apply it automatically.
+
+`platforms/web/stage-site.sh build/web <folder>` copies just the files the site needs into a folder
+of their own, ready to upload.
+
+### GitHub Pages
+
+`.github/workflows/pages.yml` builds the web target and publishes it to the repository's GitHub
+Pages site on every push to `main`. It can also be started by hand from the Actions tab. It first
+smoke-tests the published files the way Pages serves them. One-time setup:
+
+1. **Actions tab:** on a fork, GitHub doesn't run workflows until you allow them there.
+2. **Settings → Pages → Build and deployment:** set **Source** to **GitHub Actions**.
+3. **Run it:** push to `main`, or open **Actions → Deploy web build to GitHub Pages → Run
+   workflow**.
+
+The site is then at `https://<owner>.github.io/<repository>/`. The first visit reloads once while
+the service worker sets up isolation.
